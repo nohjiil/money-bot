@@ -13,7 +13,7 @@ def get_rich():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "하나", "원큐"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑"]
-    forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "-", "ㅡ", "ㄱ", "ㄴ", "주"]
+    forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "-", "ㅡ"]
     
     found = []
     for target in targets:
@@ -32,31 +32,31 @@ def get_rich():
                         full_url = href if href.startswith('http') else target['base'] + href
                         info = ""
                         
-                        # 🚀 [업그레이드] 제목에 퀴즈/정답/쏠/하나/원큐가 있을 때만 정답을 뒤짐
-                        if any(k in txt for k in ["퀴즈", "정답", "쏠", "하나", "원큐"]):
+                        if any(k in txt for k in ["퀴즈", "정답", "챌린지", "쏠", "하나", "원큐"]):
                             try:
                                 p_res = requests.get(full_url, headers=headers, timeout=5)
                                 if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
-                                # 정답 추출 로직
-                                match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,12})', body)
+                                # 🚀 [핵심수정] re.DOTALL을 사용해서 줄바꿈(\n)이 있어도 무시하고 다음 글자를 찾습니다.
+                                # "정답" 단어 이후에 나오는 공백/줄바꿈을 다 건너뛰고 1~12글자를 낚아챕니다.
+                                match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\r\n\t\s,.<>]{1,12})', body, re.DOTALL)
+                                
+                                # 만약 바로 뒤에 정답이 없으면, 근처(20자 이내)에 있는 숫자나 영어를 뒤집니다.
                                 if not match:
-                                    match = re.search(r'\((\w{1,10})\)', body)
+                                    match = re.search(r'(정답|답|정답은|답은).{0,20}?([^\r\n\t\s,.<>]{1,12})', body, re.DOTALL)
 
                                 if match:
-                                    ans_val = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
-                                    # 금지어거나 한 글자(O,X 제외)면 확인필요
-                                    if (ans_val in forbidden or len(ans_val) < 2) and ans_val.upper() not in ["O", "X"]:
+                                    ans_candidate = match.group(2).strip()
+                                    if any(f == ans_candidate for f in forbidden) or len(ans_candidate) < 1:
                                         info = " [확인필요]"
                                     else:
-                                        info = f" [정답: {ans_val}]"
+                                        info = f" [정답: {ans_candidate}]"
                                 else:
                                     info = " [확인필요]"
                             except:
                                 info = " [연결지연]"
                         
-                        # 🚀 [사장님 요청] 'Ai 키워'처럼 퀴즈 단어 없으면 [확인필요] 아예 안 띄움
                         clean_t = txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
                         if len(found) >= 20: break
@@ -70,7 +70,7 @@ def get_rich():
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "final-detect-fix", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "break-line-detect", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
