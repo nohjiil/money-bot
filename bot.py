@@ -13,6 +13,8 @@ def get_rich():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "하나", "원큐"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑"]
+    # 🚀 정답으로 나오면 안 되는 금지어 목록
+    forbidden_words = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기"]
     
     found = []
     for target in targets:
@@ -36,13 +38,16 @@ def get_rich():
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             body = p_soup.get_text()
                             
-                            # 🚀 [업그레이드] "정보", "확인" 같은 단어는 무시하고 그 뒤의 진짜 정답 찾기
-                            match = re.search(r'(정답|답|정답은)\s*[:=]?\s*(정보|확인|공유)?\s*[:=]?\s*([^\n\r\t\s,.<>]{1,15})', body)
+                            # 정답 추출 (더 정교하게)
+                            match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,15})', body)
                             
                             if match:
-                                # 3번 그룹(진짜 정답)이 있으면 그걸 쓰고, 없으면 2번이라도 씁니다.
-                                ans_val = match.group(3).strip() if match.group(3) else match.group(2).strip()
-                                info = f" [정답: {ans_val}]"
+                                ans_candidate = match.group(2).strip()
+                                # 🚀 금지어가 포함되어 있으면 무효 처리
+                                if any(f in ans_candidate for f in forbidden_words) or len(ans_candidate) < 1:
+                                    info = " [확인필요]"
+                                else:
+                                    info = f" [정답: {ans_candidate}]"
                             else:
                                 info = " [확인필요]"
                             
@@ -62,7 +67,7 @@ def get_rich():
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_content.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "fix-ans-logic", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "remove-forbidden-words", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
