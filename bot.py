@@ -11,7 +11,7 @@ def get_rich():
         {"name": "클리앙", "url": "https://www.clien.net/service/board/jirum", "base": "https://www.clien.net"}
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "적립", "클릭"]
+    include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "하나", "원큐"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑"]
     
     found = []
@@ -36,31 +36,25 @@ def get_rich():
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             body = p_soup.get_text()
                             
-                            # 1. 정답 찾기
-                            match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,15})', body)
-                            
-                            # 2. 광고/적립 링크 찾기 (네이버페이 등)
-                            ad_link = re.search(r'https://ofw\.adison\.co/u/st/click/[^\s"\'<>]+|https://naver\.me/[^\s"\'<>]+', body)
+                            # 🚀 [업그레이드] "정보", "확인" 같은 단어는 무시하고 그 뒤의 진짜 정답 찾기
+                            match = re.search(r'(정답|답|정답은)\s*[:=]?\s*(정보|확인|공유)?\s*[:=]?\s*([^\n\r\t\s,.<>]{1,15})', body)
                             
                             if match:
-                                info = f" [정답: {match.group(2).strip()}]"
-                            elif ad_link:
-                                # 광고 링크가 있으면 클릭 가능한 형태로 변환
-                                info = f' <a href="{ad_link.group(0)}" target="_blank">[적립링크 클릭]</a>'
+                                # 3번 그룹(진짜 정답)이 있으면 그걸 쓰고, 없으면 2번이라도 씁니다.
+                                ans_val = match.group(3).strip() if match.group(3) else match.group(2).strip()
+                                info = f" [정답: {ans_val}]"
                             else:
                                 info = " [확인필요]"
                             
                             clean_t = txt.split('\n')[0][:25]
-                            # HTML 링크가 포함될 수 있으므로 구조 변경
                             found.append(f"• {clean_t}{info}")
                         except:
                             found.append(f"• {txt[:25]} [연결지연]")
                         
-                        if len(found) >= 20: break # 개수를 20개로 늘림
+                        if len(found) >= 20: break
             if len(found) >= 20: break
         except: continue
 
-    # 앱에서 링크가 작동하도록 HTML로 저장
     final_content = "✅ 실시간 포인트 정보 (정답/적립):<br><br>" + "<br>".join(found) if found else "⏳ 업데이트 중..."
     
     url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
@@ -68,7 +62,7 @@ def get_rich():
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_content.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "final-upgrade", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "fix-ans-logic", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
