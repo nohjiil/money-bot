@@ -8,32 +8,32 @@ USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
 CACHE_FILE = "cache.txt"
 
-# 🚀 [정밀 수술] 정답 추출 로직
+# 🚀 [수술] '정보', '주' 같은 가짜 정답 필터링 강화
 def extract_answer(txt, body):
-    # 1. 입단속: 제목에 핵심 키워드 없으면 무시
     if not any(k in txt for k in ["퀴즈", "정답", "쏠", "하나", "원큐", "OX", "챌린지", "KB"]):
         return None
     
-    # 2. 본문 정규화 (엔터/탭 제거)
     body_clean = body.replace("\n", " ").replace("\r", " ").replace("\t", " ")
     
-    # 3. 정답 낚시 (정답: 뒤에 오는 1~12글자만 타이트하게 낚음)
-    # 사장님, 여기서 12자 이내로 제한해서 '매주' 같은 단어가 섞이는걸 막았습니다.
-    m = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\s,.<>]{1,12})', body_clean)
-    if m:
-        ans = m.group(2).strip()
-        # O, X는 한글자 허용, 나머지는 2글자 이상 (날짜 오인 방지)
-        if len(ans) >= 2 or ans.upper() in ["O", "X"]:
+    # 1단계: "정답은 OOO" 패턴 (가장 정확)
+    # 🚀 '정보', '주', '확인', '공유' 같은 단어는 정답 후보에서 아예 제외
+    forbidden_ans = ["정보", "주", "확인", "공유", "이벤트", "보기", "링크", "가기", "뽐뿌", "클리앙"]
+    
+    match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\s,.<>]{1,12})', body_clean)
+    if match:
+        ans = match.group(2).strip()
+        if ans not in forbidden_ans and (len(ans) >= 2 or ans.upper() in ["O", "X"]):
             return ans
 
-    # 4. 괄호 수색 (하나원큐 HANA 등 대비)
-    m = re.search(r'\((\w{1,12})\)', body_clean)
-    if m: return m.group(1).strip()
+    # 2단계: 괄호 수색
+    match = re.search(r'\((\w{1,12})\)', body_clean)
+    if match:
+        ans = match.group(1).strip()
+        if ans not in forbidden_ans: return ans
     
     return None
 
 def get_clean_key(txt):
-    # 제목에서 특수문자 빼고 핵심 15자만 추출 (그룹화용)
     return re.sub(r'[^\w가-힣]', '', txt)[:15]
 
 def load_cache():
@@ -64,8 +64,8 @@ def get_rich():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "퀴즈", "정답", "하나", "원큐"]
-    # 🚀 [사장님 지시] 옥션, 이후동행 완벽 차단 목록
-    exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", "AI 키워", "키워드", "이후동행", "동행퀴즈", "지마켓", "옥션매일"]
+    # 🚀 사장님 스트레스 목록 (옥션, 이후동행 완벽 차단)
+    exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", "AI 키워", "키워드", "이후동행", "동행퀴즈", "지마켓", "G마켓"]
 
     cache = load_cache()
     tasks = []
@@ -77,7 +77,6 @@ def get_rich():
             soup = BeautifulSoup(res.text, 'html.parser')
             for a in soup.select('a'):
                 txt = a.get_text().strip()
-                # 🚀 제외 키워드가 있으면 아예 클릭도 안 함
                 if any(k in txt for k in include_kws) and not any(e in txt for e in exclude_kws):
                     href = a.get('href', '')
                     if len(txt) > 5 and href:
@@ -101,10 +100,11 @@ def get_rich():
     for k, v in answer_pool.items():
         counter = Counter(v["answers"])
         best_ans, count = counter.most_common(1)[0]
-        # 다수결 체크 표시 (선택사항)
-        mark = "✔" if count >= 2 else ""
+        # 🚀 다수결이 의미 없는 '정보', '주' 같은 단어는 결과에서 아예 뺌
+        if best_ans in ["정보", "주"]: continue
+        
         clean_t = v["title"].replace("[뽐뿌]", "").replace("[클리앙]", "").strip()[:22]
-        found.append(f"• {clean_t} [정답: {best_ans} {mark}]")
+        found.append(f"• {clean_t} [정답: {best_ans}]")
 
     for nk in new_keys: cache.add(nk)
     save_cache(cache)
@@ -117,7 +117,7 @@ def get_rich():
         g = requests.get(url, headers=h)
         sha = g.json().get('sha') if g.status_code == 200 else None
         content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-        requests.put(url, json={"message": "clean-up & 정밀수사", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+        requests.put(url, json={"message": "remove garbage ans", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
     except: pass
 
 if __name__ == "__main__":
