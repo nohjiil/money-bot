@@ -12,7 +12,8 @@ def get_rich():
     ]
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "하나", "원큐"]
-    exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑"]
+    # 🚀 [차단] 옥션, 이후동행 등 불필요한 녀석들 입구컷
+    exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", "이후동행", "동행퀴즈"]
     forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "-", "ㅡ", "ㄱ", "ㄴ", "주"]
     
     found = []
@@ -32,20 +33,22 @@ def get_rich():
                         full_url = href if href.startswith('http') else target['base'] + href
                         info = ""
                         
-                        # 🚀 [사장님 특급 지시] 제목에 아래 키워드가 하나라도 있어야 '정답 수사' 시작
+                        # 🚀 [수사 시작] 제목에 퀴즈 관련 단어가 있을 때만 깊게 뒤짐
                         if any(k in txt for k in ["퀴즈", "정답", "쏠", "하나", "원큐", "OX", "챌린지"]):
                             try:
                                 p_res = requests.get(full_url, headers=headers, timeout=5)
                                 if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
-                                # 줄바꿈 무시하고 30자 이내 정답 탐색
-                                match = re.search(r'(정답|답|정답은|답은).{0,30}?\s*[:=]?\s*([^\r\n\t\s,.<>]{1,12})', body, re.DOTALL)
+                                # 🚀 [엔터 무력화] 줄바꿈 무시하고 40자 이내 정답 탐색 (하나원큐 등 대응)
+                                match = re.search(r'(정답|답|정답은|답은).{0,40}?\s*[:=]?\s*([^\r\n\t\s,.<>]{1,12})', body, re.DOTALL)
                                 if not match:
+                                    # 괄호 안의 정답 낚시 (HANA, 160경기 등)
                                     match = re.search(r'\((\w{1,12})\)', body)
 
                                 if match:
                                     ans_val = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
+                                    # 금지어거나 너무 짧으면 확인필요 (O, X는 허용)
                                     if (ans_val in forbidden or len(ans_val) < 1) and ans_val.upper() not in ["O", "X"]:
                                         info = " [확인필요]"
                                     else:
@@ -55,7 +58,7 @@ def get_rich():
                             except:
                                 info = " [연결지연]"
                         
-                        # 🚀 '퀴즈' 단어 없으면 info는 "" 상태 그대로 -> 깔끔하게 제목만 나옴
+                        # 제목에 퀴즈 단어 없으면(예: Ai 키워) info는 "" 상태 -> 깔끔하게 제목만 나옴
                         clean_t = txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
                         if len(found) >= 20: break
@@ -66,10 +69,12 @@ def get_rich():
     
     url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
     h = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-    g = requests.get(url, headers=h)
-    sha = g.json().get('sha') if g.status_code == 200 else None
-    content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "strict-title-check", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    try:
+        g = requests.get(url, headers=h)
+        sha = g.json().get('sha') if g.status_code == 200 else None
+        content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
+        requests.put(url, json={"message": "aggressive-detect-fix", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    except: pass
 
 if __name__ == "__main__":
     get_rich()
