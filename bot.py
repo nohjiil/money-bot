@@ -13,8 +13,9 @@ def get_rich():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "하나", "원큐"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑"]
-    # 🚀 정답으로 나오면 안 되는 금지어 목록
-    forbidden_words = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기"]
+    
+    # 🚀 정답 후보에서 무조건 제외할 단어들
+    forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "의견"]
     
     found = []
     for target in targets:
@@ -31,43 +32,45 @@ def get_rich():
                 if any(k in txt for k in include_kws) and not any(e in txt for e in exclude_kws):
                     if len(txt) > 5 and href:
                         full_url = href if href.startswith('http') else target['base'] + href
+                        info = ""
                         
-                        try:
-                            p_res = requests.get(full_url, headers=headers, timeout=5)
-                            if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
-                            p_soup = BeautifulSoup(p_res.text, 'html.parser')
-                            body = p_soup.get_text()
-                            
-                            # 정답 추출 (더 정교하게)
-                            match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,15})', body)
-                            
-                            if match:
-                                ans_candidate = match.group(2).strip()
-                                # 🚀 금지어가 포함되어 있으면 무효 처리
-                                if any(f in ans_candidate for f in forbidden_words) or len(ans_candidate) < 1:
-                                    info = " [확인필요]"
+                        # [조건 1] 제목에 '퀴즈'라는 단어가 있을 때만 본문에서 정답 수사
+                        if "퀴즈" in txt or "정답" in txt:
+                            try:
+                                p_res = requests.get(full_url, headers=headers, timeout=5)
+                                if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
+                                p_soup = BeautifulSoup(p_res.text, 'html.parser')
+                                body = p_soup.get_text()
+                                
+                                # 정답 추출 정규식 강화
+                                match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,10})', body)
+                                if match:
+                                    ans_val = match.group(2).strip()
+                                    # 금지어 필터링 및 의미 없는 특수문자 거르기
+                                    if any(f in ans_val for f in forbidden) or len(ans_val) < 1:
+                                        info = " [확인필요]"
+                                    else:
+                                        info = f" [정답: {ans_val}]"
                                 else:
-                                    info = f" [정답: {ans_candidate}]"
-                            else:
-                                info = " [확인필요]"
-                            
-                            clean_t = txt.split('\n')[0][:25]
-                            found.append(f"• {clean_t}{info}")
-                        except:
-                            found.append(f"• {txt[:25]} [연결지연]")
+                                    info = " [확인필요]"
+                            except:
+                                info = " [연결지연]"
+                        
+                        clean_t = txt.split('\n')[0][:25]
+                        found.append(f"• {clean_t}{info}")
                         
                         if len(found) >= 20: break
             if len(found) >= 20: break
         except: continue
 
-    final_content = "✅ 실시간 포인트 정보 (정답/적립):<br><br>" + "<br>".join(found) if found else "⏳ 업데이트 중..."
+    final_text = "✅ 실시간 포인트 정보 (정답/적립):<br><br>" + "<br>".join(found) if found else "⏳ 업데이트 중..."
     
     url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
     h = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
-    content = base64.b64encode(final_content.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "remove-forbidden-words", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
+    requests.put(url, json={"message": "fix-quiz-logic", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
