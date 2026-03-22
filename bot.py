@@ -32,32 +32,31 @@ def get_rich():
                         full_url = href if href.startswith('http') else target['base'] + href
                         info = ""
                         
-                        # 🚀 [핵심수정] 제목에 '퀴즈', '정답', '쏠', '원큐' 등 핵심 단어가 있을 때만 수사
-                        if any(k in txt for k in ["퀴즈", "정답", "챌린지", "쏠", "원큐"]):
+                        # 🚀 [업그레이드] 제목에 퀴즈/정답/쏠/하나/원큐가 있을 때만 정답을 뒤짐
+                        if any(k in txt for k in ["퀴즈", "정답", "쏠", "하나", "원큐"]):
                             try:
                                 p_res = requests.get(full_url, headers=headers, timeout=5)
                                 if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
-                                # 정답 추출 시 '주' 같은 한 글자 제외 및 필터 강화
-                                match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,10})', body)
+                                # 정답 추출 로직
+                                match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,12})', body)
                                 if not match:
                                     match = re.search(r'\((\w{1,10})\)', body)
 
                                 if match:
-                                    ans_candidate = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
-                                    # 금지어거나 길이가 2미만(한 글자)이면 무시 (O, X 제외)
-                                    is_ox = ans_candidate.upper() in ["O", "X"]
-                                    if (ans_candidate in forbidden or len(ans_candidate) < 2) and not is_ox:
+                                    ans_val = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
+                                    # 금지어거나 한 글자(O,X 제외)면 확인필요
+                                    if (ans_val in forbidden or len(ans_val) < 2) and ans_val.upper() not in ["O", "X"]:
                                         info = " [확인필요]"
                                     else:
-                                        info = f" [정답: {ans_candidate}]"
+                                        info = f" [정답: {ans_val}]"
                                 else:
                                     info = " [확인필요]"
                             except:
                                 info = " [연결지연]"
                         
-                        # 제목에 퀴즈 단어 없으면 info는 "" 상태로 유지 -> [확인필요] 안 뜸!
+                        # 🚀 [사장님 요청] 'Ai 키워'처럼 퀴즈 단어 없으면 [확인필요] 아예 안 띄움
                         clean_t = txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
                         if len(found) >= 20: break
@@ -71,7 +70,7 @@ def get_rich():
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "fix-final-logic", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "final-detect-fix", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
