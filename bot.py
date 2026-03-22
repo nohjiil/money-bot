@@ -40,7 +40,7 @@ def get_rich():
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
                                 # 🚀 [레이더 강화] 정답 단어 이후 80자까지 무조건 뒤집니다 (엔터/공백 빌런 대응)
-                                match = re.search(r'(정답|답|정답은|답은).{0,80}?\s*[:=]?\s*([^\r\n\t\s,.<>]{1,12})', body, re.DOTALL)
+                                match = re.search(r'(정답|답|정답은|답은).{0,1000}?\s*[:=]?\s*([^\r\n\t\s,.<>]{1,12})', body, re.DOTALL)
                                 if not match:
                                     # 괄호 수색 (HANA, 160경기 등)
                                     match = re.search(r'\((\w{1,12})\)', body)
