@@ -1,0 +1,18 @@
+name: Point-Bot-Automation
+on:
+  schedule:
+    - cron: '0 0,9 * * *' # 매일 오전 9시, 오후 6시 자동 실행
+  workflow_dispatch: # 사장님이 직접 돌리고 싶을 때 쓰는 버튼
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - run: pip install requests beautifulsoup4
+      - name: Run Robot
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        run: python bot.py
