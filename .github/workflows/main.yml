@@ -1,8 +1,10 @@
 name: Point-Bot-Automation
 on:
   schedule:
-    - cron: '0 0,9 * * *' # 매일 오전 9시, 오후 6시 자동 실행
-  workflow_dispatch: # 사장님이 직접 돌리고 싶을 때 쓰는 버튼
+    # 한국 시간(KST) 기준: 09:00, 12:00, 15:00, 18:00, 21:00, 00:00 실행
+    # UTC 기준으로는 9시간을 빼야 해서 아래와 같이 설정합니다.
+    - cron: '0 0,3,6,9,12,15 * * *' 
+  workflow_dispatch: # 언제든 수동으로 돌리고 싶을 때 버튼 사용
 jobs:
   build:
     runs-on: ubuntu-latest
