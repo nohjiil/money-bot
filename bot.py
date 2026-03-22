@@ -13,7 +13,9 @@ def get_rich():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "하나", "원큐"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑"]
-    forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "의견", "게시물"]
+    
+    # 🚀 정답에서 무조건 제외할 잡동사니들
+    forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "-", "ㅡ", "ㄱ", "ㄴ"]
     
     found = []
     for target in targets:
@@ -32,32 +34,28 @@ def get_rich():
                         full_url = href if href.startswith('http') else target['base'] + href
                         info = ""
                         
-                        # 🚀 퀴즈/정답 키워드가 있을 때 더 깊게 수사
+                        # 🚀 '퀴즈'나 '정답'이라는 단어가 있을 때만 본문을 뒤짐
                         if any(k in txt for k in ["퀴즈", "정답", "챌린지"]):
                             try:
                                 p_res = requests.get(full_url, headers=headers, timeout=5)
                                 if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
-                                # 1순위: '정답 : 사과' 형태
-                                match = re.search(r'(정답|답|정답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,10})', body)
-                                # 2순위: '퀴즈 : 사과' 형태
+                                # 정답 추출 (문구 및 기호 필터링 강화)
+                                match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,10})', body)
                                 if not match:
-                                    match = re.search(r'(퀴즈)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,10})', body)
-                                
+                                    match = re.search(r'\((\w{1,10})\)', body)
+
                                 if match:
-                                    ans_candidate = match.group(2).strip()
-                                    if any(f in ans_candidate for f in forbidden) or len(ans_candidate) < 1:
+                                    ans_candidate = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
+                                    
+                                    # 금지어거나 너무 짧거나 기호면 무시
+                                    if any(f == ans_candidate for f in forbidden) or len(ans_candidate) < 2:
                                         info = " [확인필요]"
                                     else:
                                         info = f" [정답: {ans_candidate}]"
                                 else:
-                                    # 3순위: 문맥상 가장 정답 같은 단어 (괄호 안의 단어 등)
-                                    lucky_match = re.search(r'\((\w{1,10})\)', body)
-                                    if lucky_match and not any(f in lucky_match.group(1) for f in forbidden):
-                                        info = f" [정답: {lucky_match.group(1)}]"
-                                    else:
-                                        info = " [확인필요]"
+                                    info = " [확인필요]"
                             except:
                                 info = " [연결지연]"
                         
@@ -69,13 +67,12 @@ def get_rich():
 
     final_text = "✅ 실시간 포인트 정보 (정답/적립):<br><br>" + "<br>".join(found) if found else "⏳ 업데이트 중..."
     
-    # 저장 로직
     url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
     h = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "final-detect-update", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "clean-ans-logic", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
