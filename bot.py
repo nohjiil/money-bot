@@ -32,24 +32,24 @@ def get_rich():
                         full_url = href if href.startswith('http') else target['base'] + href
                         info = ""
                         
-                        # 🚀 제목에 '퀴즈' 관련 키워드가 있을 때만 깊게 수사
-                        if any(k in txt for k in ["퀴즈", "정답", "챌린지"]):
+                        # 🚀 1. 제목에 '퀴즈', '정답', '쏠퀴즈' 등이 있을 때만 본문 수사
+                        if any(k in txt for k in ["퀴즈", "정답", "쏠", "하나", "원큐"]):
                             try:
                                 p_res = requests.get(full_url, headers=headers, timeout=5)
                                 if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
-                                # 🚀 정답 추출 로직 강화 (괄호나 큰따옴표 안의 단어 낚기)
-                                match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,10})', body)
+                                # 🚀 2. 정답 추출 (숫자+한글 혼합 대응: '160경기' 등 낚기)
+                                # 정답: 뒤에 오는 단어를 더 넓게 잡습니다 (공백 제외 1~12자)
+                                match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,12})', body)
                                 if not match:
-                                    # [핵심] 신한 쏠퀴즈처럼 정답만 괄호 안에 던져놓은 경우 (HANA 등)
+                                    # 괄호 안의 정답 (예: (HANA), (O))
                                     match = re.search(r'\((\w{1,10})\)', body)
 
                                 if match:
-                                    # 그룹 2가 있으면 그걸 쓰고, 없으면 1(괄호)을 씁니다.
                                     ans_candidate = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
                                     
-                                    # 금지어거나 기호 한 개면 '확인필요' 처리
+                                    # 금지어 필터링 (기호 한두 개만 있는 건 무시)
                                     if any(f == ans_candidate for f in forbidden) or len(ans_candidate) < 1:
                                         info = " [확인필요]"
                                     else:
@@ -59,6 +59,7 @@ def get_rich():
                             except:
                                 info = " [연결지연]"
                         
+                        # 🚀 3. 제목에 '퀴즈' 관련 단어가 아예 없으면 info를 비워서 [확인필요] 안 뜨게 함
                         clean_t = txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
                         if len(found) >= 20: break
@@ -72,7 +73,7 @@ def get_rich():
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "aggressive-detect", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "fix-complex-ans", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
