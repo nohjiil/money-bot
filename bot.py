@@ -13,9 +13,7 @@ def get_rich():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "플레이", "퀴즈", "정답", "하나", "원큐"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑"]
-    
-    # 🚀 정답에서 무조건 제외할 잡동사니들
-    forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "-", "ㅡ", "ㄱ", "ㄴ"]
+    forbidden = ["뽐뿌", "클리앙", "정보", "확인", "공유", "이벤트", "보기", "링크", "가기", "스크랩", "-", "ㅡ"]
     
     found = []
     for target in targets:
@@ -34,23 +32,26 @@ def get_rich():
                         full_url = href if href.startswith('http') else target['base'] + href
                         info = ""
                         
-                        # 🚀 '퀴즈'나 '정답'이라는 단어가 있을 때만 본문을 뒤짐
-                        if any(k in txt for k in ["퀴즈", "정답", "챌린지"]):
+                        # 🚀 '퀴즈' 관련 글이면 본문 수사 강도를 높임
+                        if any(k in txt for k in ["퀴즈", "정답", "챌린지", "쏠퀴즈", "OX"]):
                             try:
                                 p_res = requests.get(full_url, headers=headers, timeout=5)
                                 if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
-                                # 정답 추출 (문구 및 기호 필터링 강화)
-                                match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,10})', body)
+                                # 1단계: 가장 흔한 '정답: OOO' 패턴 (공백/기호 유연하게)
+                                match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\n\r\t\s,.<>]{1,12})', body)
+                                
+                                # 2단계: 못 찾으면 괄호나 큰따옴표 안의 단어 뒤지기 (은행 퀴즈용)
                                 if not match:
-                                    match = re.search(r'\((\w{1,10})\)', body)
+                                    match = re.search(r'[\(\"\'\[]([^\n\r\t\s]{1,10})[\)\"\'\]]', body)
 
                                 if match:
+                                    # 그룹 2가 있으면 그걸 쓰고, 없으면 1을 씁니다.
                                     ans_candidate = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
                                     
-                                    # 금지어거나 너무 짧거나 기호면 무시
-                                    if any(f == ans_candidate for f in forbidden) or len(ans_candidate) < 2:
+                                    # 금지어 필터링
+                                    if any(f == ans_candidate for f in forbidden) or len(ans_candidate) < 1:
                                         info = " [확인필요]"
                                     else:
                                         info = f" [정답: {ans_candidate}]"
@@ -72,7 +73,7 @@ def get_rich():
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "clean-ans-logic", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "aggressive-detect", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
