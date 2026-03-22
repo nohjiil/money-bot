@@ -32,27 +32,21 @@ def get_rich():
                         full_url = href if href.startswith('http') else target['base'] + href
                         info = ""
                         
-                        # 🚀 제목에 퀴즈/정답 관련 단어가 있을 때만 깊게 수사
-                        if any(k in txt for k in ["퀴즈", "정답", "챌린지", "쏠", "하나", "원큐"]):
+                        # 🚀 [사장님 특급 지시] 제목에 아래 키워드가 하나라도 있어야 '정답 수사' 시작
+                        if any(k in txt for k in ["퀴즈", "정답", "쏠", "하나", "원큐", "OX", "챌린지"]):
                             try:
                                 p_res = requests.get(full_url, headers=headers, timeout=5)
                                 if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                                 body = BeautifulSoup(p_res.text, 'html.parser').get_text()
                                 
-                                # 🚀 [핵심수정] 엔터(줄바꿈)가 있어도 뚫고 지나가는 정규표현식
-                                # "정답" 단어 이후 30자 이내에서 줄바꿈 무시하고 첫 단어를 낚음
+                                # 줄바꿈 무시하고 30자 이내 정답 탐색
                                 match = re.search(r'(정답|답|정답은|답은).{0,30}?\s*[:=]?\s*([^\r\n\t\s,.<>]{1,12})', body, re.DOTALL)
-                                
-                                # 위에서 못 찾으면 괄호 안의 내용이라도 낚아옴
                                 if not match:
                                     match = re.search(r'\((\w{1,12})\)', body)
 
                                 if match:
-                                    ans_val = match.group(2).strip() if len(match.groups()) > 1 else match.group(1).strip()
-                                    
-                                    # 금지어 및 필터링 (O, X는 허용)
-                                    is_ox = ans_val.upper() in ["O", "X"]
-                                    if (ans_val in forbidden or len(ans_val) < 1) and not is_ox:
+                                    ans_val = (match.group(2) if len(match.groups()) > 1 else match.group(1)).strip()
+                                    if (ans_val in forbidden or len(ans_val) < 1) and ans_val.upper() not in ["O", "X"]:
                                         info = " [확인필요]"
                                     else:
                                         info = f" [정답: {ans_val}]"
@@ -61,6 +55,7 @@ def get_rich():
                             except:
                                 info = " [연결지연]"
                         
+                        # 🚀 '퀴즈' 단어 없으면 info는 "" 상태 그대로 -> 깔끔하게 제목만 나옴
                         clean_t = txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
                         if len(found) >= 20: break
@@ -74,7 +69,7 @@ def get_rich():
     g = requests.get(url, headers=h)
     sha = g.json().get('sha') if g.status_code == 200 else None
     content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-    requests.put(url, json={"message": "aggressive-multiline-fix", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    requests.put(url, json={"message": "strict-title-check", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
 
 if __name__ == "__main__":
     get_rich()
