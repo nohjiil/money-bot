@@ -6,216 +6,125 @@ from collections import Counter
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
-
 CACHE_FILE = "cache.txt"
 
 # ---------------------------
-# 앱 분류
+# 정답 추출 (사장님 코드 보강 버전)
 # ---------------------------
-def detect_app(txt):
-    if "토스" in txt:
-        return "toss"
-    elif "신한" in txt or "쏠" in txt:
-        return "shinhan"
-    elif "카카오" in txt:
-        return "kakao"
-    elif "KB" in txt or "국민" in txt:
-        return "kb"
-    elif "하나" in txt:
-        return "hana"
-    return "etc"
+def extract_answer(txt, body):
+    # 🚀 1. 입단속: 제목에 핵심 키워드가 없으면 본문 보지도 않음
+    if not any(k in txt for k in ["퀴즈", "정답", "쏠", "하나", "원큐", "OX", "챌린지", "KB"]):
+        return None
 
-# ---------------------------
-# 정답 검증
-# ---------------------------
-def is_valid_answer(ans):
-    if not ans:
-        return False
+    # 🚀 2. 전처리: 엔터(줄바꿈)를 공백으로 바꿔서 거리 무력화
+    body = body.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    
+    # 🚀 3. 정답 낚시 (가장 확률 높은 패턴부터)
+    # 패턴: '정답' 혹은 '답' 뒤에 나오는 1~12글자 (특수문자 제외)
+    match = re.search(r'(정답|답|정답은|답은)\s*[:=]?\s*([^\s,.<>]{1,12})', body)
+    if match:
+        ans = match.group(2).strip()
+        # 한 글자라도 O, X면 인정, 그 외엔 2글자 이상만 인정 (날짜 오인 방지)
+        if len(ans) >= 2 or ans.upper() in ["O", "X"]:
+            return ans
 
-    ans = ans.strip()
-
-    bad_words = ["정보", "확인", "이벤트", "보기", "링크", "공유", "주"]
-
-    if ans in bad_words:
-        return False
-
-    if any(c in ans for c in ["(", ")", "[", "]", "<", ">"]):
-        return False
-
-    if len(ans) > 10:
-        return False
-
-    if ans.isdigit():
-        return True
-
-    if ans.upper() in ["O", "X"]:
-        return True
-
-    if re.match(r'^[가-힣A-Za-z]{2,10}$', ans):
-        return True
-
-    return False
-
-# ---------------------------
-# 정답 추출 (균형 버전)
-# ---------------------------
-def extract_answer(body):
-    body = body.replace("\n", " ")
-
-    # 1️⃣ 정답 근처 숫자
-    m = re.search(r'(정답|답).{0,20}?(\d{1,4})', body)
-    if m:
-        return m.group(2)
-
-    # 2️⃣ OX
-    m = re.search(r'(정답|답).{0,15}?([OX])', body, re.IGNORECASE)
-    if m:
-        return m.group(2).upper()
-
-    # 3️⃣ 텍스트
-    m = re.search(r'(정답|답).{0,20}?[:=]?\s*([가-힣A-Za-z]{2,10})', body)
-    if m:
-        return m.group(2)
-
-    # 4️⃣ 괄호 fallback
-    m = re.search(r'\((\d{1,4}|[A-Za-z]{1,10})\)', body)
-    if m:
-        return m.group(1)
+    # 🚀 4. 괄호 뒤지기 (HANA, 160경기 등)
+    match = re.search(r'\((\w{1,12})\)', body)
+    if match:
+        return match.group(1).strip()
 
     return None
 
-# ---------------------------
-# 캐시
-# ---------------------------
+def get_clean_key(txt):
+    return re.sub(r'[^\w가-힣]', '', txt)[:15]
+
 def load_cache():
     try:
-        with open(CACHE_FILE, "r") as f:
-            return set(f.read().splitlines())
-    except:
-        return set()
+        with open(CACHE_FILE, "r") as f: return set(f.read().splitlines())
+    except: return set()
 
 def save_cache(cache):
-    with open(CACHE_FILE, "w") as f:
-        f.write("\n".join(cache))
+    with open(CACHE_FILE, "w") as f: f.write("\n".join(list(cache)[-500:]))
 
-# ---------------------------
-# 링크 처리
-# ---------------------------
-def process_link(txt, full_url, headers, cache):
+def process_link(txt, full_url, headers, cache_set):
     key = hashlib.md5(full_url.encode()).hexdigest()
-
-    if key in cache:
-        return None
-
+    if key in cache_set: return None
     try:
         res = requests.get(full_url, headers=headers, timeout=5)
-        if "ppomppu" in full_url:
-            res.encoding = 'euc-kr'
+        if "ppomppu" in full_url: res.encoding = 'euc-kr'
+        soup = BeautifulSoup(res.text, 'html.parser')
+        for s in soup(['script', 'style']): s.decompose()
+        ans_val = extract_answer(txt, soup.get_text())
+        if ans_val: return (get_clean_key(txt), ans_val, txt, key)
+    except: return None
 
-        body = BeautifulSoup(res.text, 'html.parser').get_text()
-
-        ans_val = extract_answer(body)
-
-        cache.add(key)
-
-        if is_valid_answer(ans_val):
-            title_key = txt[:20]
-            return (title_key, ans_val, txt)
-
-    except:
-        return None
-
-# ---------------------------
-# 메인
-# ---------------------------
 def get_rich():
     targets = [
         {"url": "https://www.ppomppu.co.kr/zboard/zboard.php?id=coupon", "base": "https://www.ppomppu.co.kr/zboard/"},
         {"url": "https://www.clien.net/service/board/jirum", "base": "https://www.clien.net"}
     ]
-
     headers = {'User-Agent': 'Mozilla/5.0'}
-
-    include_kws = ["토스", "카카오", "KB", "국민", "신한", "쏠", "퀴즈", "정답", "하나"]
-    exclude_kws = ["모니모", "핫딜", "출석", "만보기", "쇼핑", "AI 키워", "키워드"]
+    
+    include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "퀴즈", "정답", "하나", "원큐"]
+    
+    # 🚀 [사장님 특별 지시] 차단 목록 강화
+    exclude_kws = [
+        "모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", 
+        "AI 키워", "키워드", "이후동행", "동행퀴즈", "지마켓"
+    ]
 
     cache = load_cache()
     tasks = []
 
-    # 링크 수집
     for target in targets:
         try:
             res = requests.get(target['url'], headers=headers, timeout=10)
-            if "ppomppu" in target['url']:
-                res.encoding = 'euc-kr'
-
+            if "ppomppu" in target['url']: res.encoding = 'euc-kr'
             soup = BeautifulSoup(res.text, 'html.parser')
-
             for a in soup.select('a'):
                 txt = a.get_text().strip()
-                href = a.get('href', '')
-
+                # 🚀 제외 키워드가 하나라도 있으면 아예 무시
                 if any(k in txt for k in include_kws) and not any(e in txt for e in exclude_kws):
+                    href = a.get('href', '')
                     if len(txt) > 5 and href:
-                        full_url = href if href.startswith('http') else target['base'] + href
+                        tasks.append((txt, href if href.startswith('http') else target['base'] + href))
+        except: continue
 
-                        if "퀴즈" in txt or "정답" in txt:
-                            tasks.append((txt, full_url))
-
-        except:
-            continue
-
-    # 병렬 처리
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        results = executor.map(lambda x: process_link(x[0], x[1], headers, cache), tasks)
-
-    # 다수결
     answer_pool = {}
+    new_keys = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(lambda x: process_link(x[0], x[1], headers, cache), tasks))
 
     for r in results:
-        if not r:
-            continue
-
-        title_key, ans_val, original_txt = r
-
-        if title_key not in answer_pool:
-            answer_pool[title_key] = {"answers": [], "title": original_txt}
-
-        answer_pool[title_key]["answers"].append(ans_val)
+        if r:
+            group_key, ans, full_txt, link_key = r
+            if group_key not in answer_pool:
+                answer_pool[group_key] = {"answers": [], "title": full_txt}
+            answer_pool[group_key]["answers"].append(ans)
+            new_keys.append(link_key)
 
     found = []
-
     for k, v in answer_pool.items():
         counter = Counter(v["answers"])
         best_ans, count = counter.most_common(1)[0]
-
-        # ✔ 2개 이상이면 체크
-        mark = "✔" if count >= 2 else ""
-
-        clean_t = v["title"].split('\n')[0][:25]
+        mark = "✔" if count >= 2 else "?"
+        # 제목 앞머리만 깔끔하게 출력
+        clean_t = v["title"].replace("[뽐뿌]", "").replace("[클리앙]", "").strip()[:20]
         found.append(f"• {clean_t} [정답: {best_ans} {mark}]")
 
-        if len(found) >= 20:
-            break
-
+    for nk in new_keys: cache.add(nk)
     save_cache(cache)
-
-    final_text = "✅ 실시간 포인트 정보:<br><br>" + "<br>".join(found) if found else "⏳ 업데이트 중..."
-
-    # GitHub 업로드
+    
+    final_text = "✅ 실시간 포인트 정보 (정답/적립):<br><br>" + "<br>".join(found) if found else "⏳ 새로운 정답을 찾는 중..."
+    
     url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
-    h = {"Authorization": f"token {GITHUB_TOKEN}"}
-
-    g = requests.get(url, headers=h)
-    sha = g.json().get('sha') if g.status_code == 200 else None
-
-    content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-
-    requests.put(
-        url,
-        json={"message": "stable bot", "content": content, "sha": sha} if sha else {"message": "init", "content": content},
-        headers=h
-    )
+    h = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        g = requests.get(url, headers=h)
+        sha = g.json().get('sha') if g.status_code == 200 else None
+        content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
+        requests.put(url, json={"message": "clean-up & answer fix", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+    except: pass
 
 if __name__ == "__main__":
     get_rich()
