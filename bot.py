@@ -26,7 +26,7 @@ def detect_app(txt):
     return "etc"
 
 # ---------------------------
-# 정답 검증 (핵심)
+# 정답 검증
 # ---------------------------
 def is_valid_answer(ans):
     if not ans:
@@ -57,27 +57,27 @@ def is_valid_answer(ans):
     return False
 
 # ---------------------------
-# 정답 추출 (정확도 강화)
+# 정답 추출 (균형 버전)
 # ---------------------------
-def extract_answer(app, body):
+def extract_answer(body):
     body = body.replace("\n", " ")
 
-    # 🔥 1순위: 숫자 (가장 정확)
-    m = re.search(r'(정답|답).{0,50}?(\d{1,4})', body)
+    # 1️⃣ 정답 근처 숫자
+    m = re.search(r'(정답|답).{0,20}?(\d{1,4})', body)
     if m:
         return m.group(2)
 
-    # 🔥 2순위: OX
-    m = re.search(r'(정답|답).{0,20}?([OX])', body, re.IGNORECASE)
+    # 2️⃣ OX
+    m = re.search(r'(정답|답).{0,15}?([OX])', body, re.IGNORECASE)
     if m:
         return m.group(2).upper()
 
-    # 🔥 3순위: 텍스트
-    m = re.search(r'(정답|답).{0,30}?[:=]?\s*([가-힣A-Za-z]{2,10})', body)
+    # 3️⃣ 텍스트
+    m = re.search(r'(정답|답).{0,20}?[:=]?\s*([가-힣A-Za-z]{2,10})', body)
     if m:
         return m.group(2)
 
-    # fallback
+    # 4️⃣ 괄호 fallback
     m = re.search(r'\((\d{1,4}|[A-Za-z]{1,10})\)', body)
     if m:
         return m.group(1)
@@ -114,7 +114,7 @@ def process_link(txt, full_url, headers, cache):
 
         body = BeautifulSoup(res.text, 'html.parser').get_text()
 
-        ans_val = extract_answer(detect_app(txt), body)
+        ans_val = extract_answer(body)
 
         cache.add(key)
 
@@ -189,18 +189,20 @@ def get_rich():
         counter = Counter(v["answers"])
         best_ans, count = counter.most_common(1)[0]
 
-        # 🔥 핵심: 2개 이상 일치만 출력
-        if count >= 2:
-            clean_t = v["title"].split('\n')[0][:25]
-            found.append(f"• {clean_t} [정답: {best_ans} ✔]")
+        # ✔ 2개 이상이면 체크
+        mark = "✔" if count >= 2 else ""
+
+        clean_t = v["title"].split('\n')[0][:25]
+        found.append(f"• {clean_t} [정답: {best_ans} {mark}]")
 
         if len(found) >= 20:
             break
 
     save_cache(cache)
 
-    final_text = "✅ 실시간 포인트 정보 (검증된 정답):<br><br>" + "<br>".join(found) if found else "⏳ 검증 중..."
+    final_text = "✅ 실시간 포인트 정보:<br><br>" + "<br>".join(found) if found else "⏳ 업데이트 중..."
 
+    # GitHub 업로드
     url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
     h = {"Authorization": f"token {GITHUB_TOKEN}"}
 
@@ -211,10 +213,9 @@ def get_rich():
 
     requests.put(
         url,
-        json={"message": "accuracy bot", "content": content, "sha": sha} if sha else {"message": "init", "content": content},
+        json={"message": "stable bot", "content": content, "sha": sha} if sha else {"message": "init", "content": content},
         headers=h
     )
-
 
 if __name__ == "__main__":
     get_rich()
