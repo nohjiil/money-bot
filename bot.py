@@ -28,43 +28,32 @@ def get_rich():
                 if any(k in title_txt for k in include_kws) and not any(e in title_txt for e in exclude_kws):
                     if len(title_txt) > 5 and href:
                         full_url = href if href.startswith('http') else target['base'] + href
-                        info = ""
+                        ans = ""
                         
+                        # 🚀 [특수 낚시 1] 제목 끝에 '-' 뒤에 붙은 정답 낚기 (다이어리, 피톤치드 등)
+                        t_match = re.search(r'-\s*([^\s]{2,10})$', title_txt)
+                        if t_match: ans = t_match.group(1).strip()
+
                         try:
                             time.sleep(1.0)
                             p_res = requests.get(full_url, headers=headers, timeout=7)
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             for s in p_soup(['script', 'style', 'img', 'iframe']): s.decompose()
-                            body = p_soup.get_text()
+                            body_c = re.sub(r'\s+', ' ', p_soup.get_text()).strip()
+                            body_cut = body_c.split("PS")[0].split("추신")[0]
                             
-                            # 🚀 [수리] 광고 절단 및 텍스트 청소
-                            body_c = body.split("PS")[0].split("추신")[0].split("참고")[0]
-                            body_c = re.sub(r'\s+', ' ', body_c).strip()
+                            # 🚀 [특수 낚시 2] 본문에서 '정답 :' 패턴 찾기
+                            if not ans:
+                                m = re.search(r'(정답|답|정답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_cut)
+                                if m: ans = m.group(2).strip()
                             
-                            # 🚀 [핵심] 정답을 더 공격적으로 낚는 낚시바늘들
-                            # 1순위: '정답 : 단어' (신세계면세점 등)
-                            m1 = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_c)
-                            # 2순위: '숫자번 단어' (3번 신세계 등)
-                            m2 = re.search(r'(\d번)\s*([^\s,.<>]{1,15})', body_c)
-                            # 3순위: 괄호 안의 단어 (HANA 등)
-                            m3 = re.search(r'\((\w{1,15})\)', body_c)
-
-                            ans = ""
-                            if m1: ans = m1.group(2).strip()
-                            elif m2: ans = f"{m2.group(1)} {m2.group(2).strip()}"
-                            elif m3: ans = m3.group(1).strip()
-
-                            # 제목 낚시(황금열매 등) 차단 로직
-                            if ans and ans in title_txt and len(ans) > 1: ans = ""
-
                             if ans and len(ans) > 1:
                                 info = f" [정답: {ans}]"
                             else:
-                                # 정답 못 찾으면 그때만 미리보기!
-                                info = f" [미리보기: {body_c[:35]}...]"
+                                info = f" [미리보기: {body_cut[:35]}...]"
                         except:
-                            info = " [확인필요]"
+                            info = " [연결지연]"
                         
                         clean_t = title_txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
@@ -80,7 +69,7 @@ def get_rich():
         g = requests.get(url, headers=h)
         sha = g.json().get('sha') if g.status_code == 200 else None
         content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-        requests.put(url, json={"message": "fix: aggressive answer extraction", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
+        requests.put(url, json={"message": "fix: title-end answer detection", "content": content, "sha": sha} if sha else {"message": "init", "content": content}, headers=h)
     except: pass
 
 if __name__ == "__main__":
