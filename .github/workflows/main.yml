@@ -2,29 +2,33 @@ name: Point-Bot-Automation
 
 on:
   schedule:
-    # 🚀 한국 시간 기준 (UTC+9 계산)
-    - cron: '0 0 * * *'  # 오전 09:00 (UTC 00:00)
-    - cron: '0 3 * * *'  # 오후 12:00 (UTC 03:00)
-    - cron: '0 9 * * *'  # 오후 18:00 (UTC 09:00)
-  workflow_dispatch:      # 🚀 사장님이 폰으로 누르는 '수동 버튼' (유지)
+    # ✅ 한국시간 기준 (KST)
+    - cron: '0 0 * * *'   # 09:00
+    - cron: '0 3 * * *'   # 12:00
+    - cron: '0 6 * * *'   # 15:00
+    - cron: '0 9 * * *'   # 18:00
+    - cron: '0 12 * * *'  # 21:00
+    - cron: '0 15 * * *'  # 00:00
+  workflow_dispatch:   # 수동 실행 버튼
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: 코드 가져오기
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: 파이썬 설치
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
-      - name: Install dependencies
+      - name: 라이브러리 설치
         run: |
           pip install requests beautifulsoup4
 
-      - name: Run Bot
+      - name: 봇 실행
+        run: python bot.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python bot.py
