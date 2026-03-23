@@ -10,48 +10,72 @@ USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    'User-Agent': 'Mozilla/5.0'
 }
 
 INCLUDE_KWS = ["토스","네이버","카카오","KB","국민","신한","쏠","하나","원큐","스타뱅킹","플레이"]
 EXCLUDE_KWS = ["모니모","옥션","비트버니","핫딜","출석","만보기","쇼핑","지마켓","AI 키워","키워드"]
 
 TARGETS = [
-    {"name": "뽐뿌", "url": "https://www.ppomppu.co.kr/zboard/zboard.php?id=coupon", "base": "https://www.ppomppu.co.kr/zboard/"},
-    {"name": "클리앙", "url": "https://www.clien.net/service/board/jirum", "base": "https://www.clien.net"}
+    {"url": "https://www.ppomppu.co.kr/zboard/zboard.php?id=coupon", "base": "https://www.ppomppu.co.kr/zboard/"},
+    {"url": "https://www.clien.net/service/board/jirum", "base": "https://www.clien.net"}
 ]
 
+# ❌ 쓰레기 정답 필터
+BAD_ANS = ["정답", "정보", "확인", "받으세요", "이벤트", "팀플전"]
 
-def extract_answer(title, body):
-    # 1. 제목 끝 정답
-    m = re.search(r'[-\s:답]+([^\s]{2,10})$', title)
+def is_valid_answer(ans):
+    if not ans:
+        return False
+    if ans in BAD_ANS:
+        return False
+    if len(ans) < 2:
+        return False
+    if not re.match(r'^[가-힣A-Za-z0-9]{2,10}$', ans):
+        return False
+    return True
+
+
+def extract_answer(title, text):
+    # 제목에서 찾기
+    m = re.search(r'[-: ]([가-힣A-Za-z0-9]{2,10})$', title)
     if m:
-        return m.group(1).strip()
+        return m.group(1)
 
-    # 2. 본문 정답 패턴
+    # 본문 + 댓글에서 찾기
     patterns = [
-        r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})',
-        r'([^\s,.<>]{2,15})\s*-\s*정답'
+        r'(정답|답|정답은|답은)\s*[:=]\s*([가-힣A-Za-z0-9]{2,10})',
+        r'([가-힣A-Za-z0-9]{2,10})\s*-\s*정답'
     ]
 
     for p in patterns:
-        m = re.search(p, body)
+        m = re.search(p, text)
         if m:
-            return m.group(2 if len(m.groups()) > 1 else 1).strip()
+            return m.group(2 if len(m.groups()) > 1 else 1)
 
     return None
+
+
+# 🔥 댓글 추출 (핵심)
+def extract_comments(soup):
+    comments = []
+    for c in soup.select('.comment, .reply, .cmt_content, td.comment'):
+        t = c.get_text().strip()
+        if t:
+            comments.append(t)
+    return " ".join(comments)
 
 
 def crawl():
     results = []
 
-    for target in TARGETS:
+    for t in TARGETS:
         try:
-            res = requests.get(target['url'], headers=HEADERS, timeout=10)
-            if "ppomppu" in target['url']:
-                res.encoding = 'euc-kr'
+            r = requests.get(t['url'], headers=HEADERS, timeout=10)
+            if "ppomppu" in t['url']:
+                r.encoding = 'euc-kr'
 
-            soup = BeautifulSoup(res.text, 'html.parser')
+            soup = BeautifulSoup(r.text, 'html.parser')
 
             for a in soup.select('a'):
                 title = a.get_text().strip()
@@ -66,10 +90,7 @@ def crawl():
                 if any(e in title for e in EXCLUDE_KWS):
                     continue
 
-                url = href if href.startswith('http') else target['base'] + href
-
-                answer = None
-                preview = ""
+                url = href if href.startswith('http') else t['base'] + href
 
                 try:
                     time.sleep(0.7)
@@ -78,31 +99,29 @@ def crawl():
                         p.encoding = 'euc-kr'
 
                     ps = BeautifulSoup(p.text, 'html.parser')
+
                     for s in ps(['script','style','img','iframe']):
                         s.decompose()
 
                     body = re.sub(r'\s+', ' ', ps.get_text()).strip()
-                    body_cut = body.split("PS")[0].split("추신")[0]
 
-                    answer = extract_answer(title, body_cut)
+                    # 🔥 댓글 포함
+                    comments = extract_comments(ps)
+                    full_text = body + " " + comments
 
-                    if not answer:
-                        preview = body_cut[:30]
+                    answer = extract_answer(title, full_text)
+
+                    clean_title = title[:30]
+
+                    # 🔥 필터 적용
+                    if is_valid_answer(answer):
+                        results.append(f"• {clean_title} [정답: {answer}]")
+
+                    if len(results) >= 20:
+                        return results
 
                 except:
-                    preview = "연결지연"
-
-                clean_title = title.split('\n')[0][:30]
-
-                if answer:
-                    line = f"• {clean_title} [정답: {answer}]"
-                else:
-                    line = f"• {clean_title} [확인필요]"
-
-                results.append(line)
-
-                if len(results) >= 25:
-                    return results
+                    continue
 
         except:
             continue
@@ -114,23 +133,20 @@ def make_text(items):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if not items:
-        items = ["⏳ 정보 수집 중..."]
+        items = ["⏳ 정답 없음"]
 
-    text = f"""📅 업데이트 시간: {now}
+    return f"""📅 업데이트 시간: {now}
 
 ✅ 실시간 포인트 정보 (정답/적립)
 ----------------------------------
 """ + "\n".join(items)
-
-    return text
 
 
 def upload_github(text):
     url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
 
     headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
+        "Authorization": f"token {GITHUB_TOKEN}"
     }
 
     r = requests.get(url, headers=headers)
@@ -146,8 +162,7 @@ def upload_github(text):
     if sha:
         data["sha"] = sha
 
-    res = requests.put(url, json=data, headers=headers)
-    print("GitHub:", res.status_code)
+    requests.put(url, json=data, headers=headers)
 
 
 def send_telegram(text):
@@ -158,12 +173,11 @@ def send_telegram(text):
         "text": text
     }
 
-    res = requests.post(url, data=data)
-    print("Telegram:", res.status_code)
+    requests.post(url, data=data)
 
 
 def main():
-    print("🔥 BOT 실행")
+    print("🔥 실행")
 
     items = crawl()
     text = make_text(items)
