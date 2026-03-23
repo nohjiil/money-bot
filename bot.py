@@ -2,9 +2,7 @@ import os
 import requests
 import base64
 from datetime import datetime
-import random
 
-# 🔑 기본 설정
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
@@ -13,7 +11,6 @@ FILE_PATH = "data.txt"
 API_URL = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/{FILE_PATH}"
 
 
-# 📌 기존 파일 sha 가져오기
 def get_file_sha():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     res = requests.get(API_URL, headers=headers)
@@ -23,72 +20,76 @@ def get_file_sha():
     return None
 
 
-# 📌 랜덤 이벤트 생성 (실사용처럼 보이게)
-def generate_events():
-    toss = [
-        "토스 만보기 참여 가능",
-        "토스 친구 켜기 이벤트 진행중",
-        "토스 행운퀴즈 참여 가능"
-    ]
+# ✅ 핵심: 텍스트 정리 필터
+def clean_text(raw_text):
+    lines = raw_text.split("\n")
+    cleaned = []
 
-    naver = [
-        "네이버 포인트 뽑기 진행중",
-        "네이버 쇼핑 적립 이벤트 있음"
-    ]
+    for line in lines:
+        line = line.strip()
 
-    kakao = [
-        "카카오 퀴즈 참여 가능",
-        "카카오페이 출석 이벤트 있음"
-    ]
+        # ❌ 필요 없는 것 제거
+        if not line:
+            continue
+        if "미리보기" in line:
+            continue
+        if "공유용" in line:
+            continue
+        if len(line) < 5:
+            continue
 
-    kb = [
-        "KB 오늘의 퀴즈 있음",
-        "KB 출석체크 참여 가능"
-    ]
+        # ✔️ 앞에 점/특수문자 제거
+        line = line.replace("•", "").strip()
 
-    shinhan = [
-        "신한 퀴즈팡팡 참여 가능",
-        "신한 출석 이벤트 있음"
-    ]
+        cleaned.append(line)
 
-    hana = [
-        "하나 출석 체크 가능",
-        "하나 퀴즈 참여 가능"
-    ]
-
-    # 👉 랜덤으로 일부만 선택 (매번 바뀌게)
-    def pick(arr):
-        return random.sample(arr, random.randint(1, len(arr)))
-
-    return (
-        pick(toss)
-        + pick(naver)
-        + pick(kakao)
-        + pick(kb)
-        + pick(shinhan)
-        + pick(hana)
-    )
+    return cleaned
 
 
-# 📌 data.txt 내용 생성
+# 👉 여기 실제 데이터 넣으면 됨 (지금은 테스트용)
+def get_raw_data():
+    return """
+• [네이버페이]지난쇼라 1원들
+• [네이버페이]19시 쇼라 5원들
+• [네이버페이]배민클럽 15원
+• [카카오뱅크]260323 카카오뱅크 Ai 이모
+• [네이버페이]11시 쇼라 5원들
+• [네이버페이]10시 쇼라 5원
+• [KB Pay] 오늘의 퀴즈 3/23일자 정답
+• [카카오페이]퀴즈
+• [네이버페이]9시 쇼라 5원
+• [네이버페이]후디스펫 브랜드스토어 100원 받
+• [카카오뱅크]AI 퀴즈
+• [토스]260323 토스알바 밸런스게임 팀플전
+• [네이버페이]요기요 등 13원 받으세요
+• [토스]260323 토스 버튼 눌러 1등 만들기
+• [토스]260323 토스 두근두근 1등 찍기
+• [네이버페이]이번 주 카페 결제 적립 신청
+• [카카오뱅크]OX 퀴즈 3/23 정답
+• [하나원큐]슬기로운 금융생활 OX퀴즈 정답
+• 토스 및 네이버 페이왕 관련 이벤트 공유용 게시글
+"""
+
+
 def make_content():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    events = generate_events()
+    raw = get_raw_data()
+    cleaned = clean_text(raw)
 
     lines = [
         f"📅 업데이트 시간: {now}",
         "",
-        "💰 오늘 참여 가능한 포인트 이벤트",
+        "✅ 실시간 포인트 정보 (정답/적립)",
         "----------------------------------",
     ]
 
-    lines.extend(events)
+    for item in cleaned:
+        lines.append(f"• {item}")
 
     return "\n".join(lines)
 
 
-# 📌 GitHub 업데이트
 def update_github(content):
     sha = get_file_sha()
 
@@ -100,7 +101,7 @@ def update_github(content):
     encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
     data = {
-        "message": "🤖 auto update",
+        "message": "clean update",
         "content": encoded,
         "branch": "main"
     }
@@ -117,7 +118,6 @@ def update_github(content):
         print(res.text)
 
 
-# 🚀 실행
 if __name__ == "__main__":
     content = make_content()
     update_github(content)
