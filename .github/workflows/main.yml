@@ -1,25 +1,24 @@
-name: bot
+name: run-bot
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    - cron: '0 */3 * * *'   # ⏰ 3시간마다 실행
+  workflow_dispatch:        # 수동 실행 버튼
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 코드 가져오기
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - run: pip install requests beautifulsoup4
-
-      - run: python bot.py
+      - name: 실행
+        run: python bot.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
