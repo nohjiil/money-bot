@@ -2,7 +2,9 @@ import os
 import requests
 import base64
 from datetime import datetime
+from bs4 import BeautifulSoup
 
+# 🔑 설정
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
@@ -11,6 +13,7 @@ FILE_PATH = "data.txt"
 API_URL = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/{FILE_PATH}"
 
 
+# 📌 기존 파일 SHA 가져오기
 def get_file_sha():
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     res = requests.get(API_URL, headers=headers)
@@ -20,62 +23,65 @@ def get_file_sha():
     return None
 
 
-# ✅ 핵심: 텍스트 정리 필터
-def clean_text(raw_text):
-    lines = raw_text.split("\n")
-    cleaned = []
+# 📌 뽐뿌 크롤링
+def fetch_ppomppu():
+    url = "https://www.ppomppu.co.kr/zboard/zboard.php?id=ppomppu"
 
-    for line in lines:
-        line = line.strip()
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
 
-        # ❌ 필요 없는 것 제거
-        if not line:
+    res = requests.get(url, headers=headers, timeout=10)
+    res.encoding = "euc-kr"
+
+    return res.text
+
+
+# 📌 제목 추출 + 필터링
+def extract_titles(html):
+    soup = BeautifulSoup(html, "html.parser")
+
+    results = []
+    seen = set()
+
+    for a in soup.select("a"):
+        text = a.get_text(strip=True)
+
+        # 🔥 핵심 필터 (돈 되는 키워드만)
+        if not any(k in text for k in ["토스", "네이버", "카카오", "KB", "신한", "하나"]):
             continue
-        if "미리보기" in line:
+
+        # ❌ 제거 대상
+        if "미리보기" in text:
             continue
-        if "공유용" in line:
+        if "댓글" in text:
             continue
-        if len(line) < 5:
+        if len(text) < 8:
             continue
 
-        # ✔️ 앞에 점/특수문자 제거
-        line = line.replace("•", "").strip()
+        # 중복 제거
+        if text in seen:
+            continue
+        seen.add(text)
 
-        cleaned.append(line)
+        results.append(text)
 
-    return cleaned
-
-
-# 👉 여기 실제 데이터 넣으면 됨 (지금은 테스트용)
-def get_raw_data():
-    return """
-• [네이버페이]지난쇼라 1원들
-• [네이버페이]19시 쇼라 5원들
-• [네이버페이]배민클럽 15원
-• [카카오뱅크]260323 카카오뱅크 Ai 이모
-• [네이버페이]11시 쇼라 5원들
-• [네이버페이]10시 쇼라 5원
-• [KB Pay] 오늘의 퀴즈 3/23일자 정답
-• [카카오페이]퀴즈
-• [네이버페이]9시 쇼라 5원
-• [네이버페이]후디스펫 브랜드스토어 100원 받
-• [카카오뱅크]AI 퀴즈
-• [토스]260323 토스알바 밸런스게임 팀플전
-• [네이버페이]요기요 등 13원 받으세요
-• [토스]260323 토스 버튼 눌러 1등 만들기
-• [토스]260323 토스 두근두근 1등 찍기
-• [네이버페이]이번 주 카페 결제 적립 신청
-• [카카오뱅크]OX 퀴즈 3/23 정답
-• [하나원큐]슬기로운 금융생활 OX퀴즈 정답
-• 토스 및 네이버 페이왕 관련 이벤트 공유용 게시글
-"""
+    return results[:25]  # 최대 25개
 
 
+# 📌 data.txt 생성
 def make_content():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    raw = get_raw_data()
-    cleaned = clean_text(raw)
+    try:
+        html = fetch_ppomppu()
+        titles = extract_titles(html)
+
+        if not titles:
+            titles = ["❌ 데이터를 가져오지 못했습니다"]
+
+    except Exception as e:
+        titles = [f"❌ 오류 발생: {str(e)}"]
 
     lines = [
         f"📅 업데이트 시간: {now}",
@@ -84,12 +90,13 @@ def make_content():
         "----------------------------------",
     ]
 
-    for item in cleaned:
-        lines.append(f"• {item}")
+    for t in titles:
+        lines.append(f"• {t}")
 
     return "\n".join(lines)
 
 
+# 📌 GitHub 업데이트
 def update_github(content):
     sha = get_file_sha()
 
@@ -101,7 +108,7 @@ def update_github(content):
     encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
     data = {
-        "message": "clean update",
+        "message": "🤖 auto update (real data)",
         "content": encoded,
         "branch": "main"
     }
@@ -118,6 +125,7 @@ def update_github(content):
         print(res.text)
 
 
+# 🚀 실행
 if __name__ == "__main__":
     content = make_content()
     update_github(content)
