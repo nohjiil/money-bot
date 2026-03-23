@@ -1,79 +1,83 @@
 import os
+import requests
+import base64
 from datetime import datetime
-import pytz
-from github import Github # pip install PyGithub 필요
 
-# --- 환경 변수 설정 ---
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+# 🔑 설정
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
+FILE_PATH = "data.txt"
 
-# 1. 크롤링 함수들 (이전과 동일)
-def get_toss_info():
-    return "✅ [토스] 행운퀴즈 정답: 1234\n✅ [토스] 만보기 친구 링크: https://toss.im/..."
+API_URL = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/{FILE_PATH}"
 
-def get_naver_info():
-    return "✅ [네이버] 쇼핑라이브 10원 링크: https://...\n✅ [네이버] 클릭 적립 링크: https://..."
 
-def get_kakao_info():
-    return "✅ [카카오] 카카오페이 퀴즈 정답: O"
+def get_file_sha():
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    res = requests.get(API_URL, headers=headers)
 
-def get_kb_info():
-    return "✅ [KB] Pay 오늘의 퀴즈 정답: 포인세티아"
+    if res.status_code == 200:
+        return res.json()["sha"]
+    return None
 
-def get_shinhan_info():
-    return "✅ [신한] 쏠야구 퀴즈 정답: 1번\n✅ [신한] 플레이 퀴즈팡팡 정답: X"
 
-def get_hana_info():
-    return "✅ [하나] 원큐 환전지갑 퀴즈 정답: 3번"
+def collect_data():
+    """
+    👉 여기서 실제 데이터 구성
+    지금은 안정적으로 '동작하는 구조'부터 만든다
+    """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-# 2. 텍스트 생성
-def generate_content():
-    korea_tz = pytz.timezone('Asia/Seoul')
-    now = datetime.now(korea_tz).strftime('%Y년 %m월 %d일 %H:%M:%S')
-    
-    content = f"⏰ 마지막 업데이트: {now}\n"
-    content += "="*30 + "\n\n"
-    content += "[오늘의 정답 및 포인트 링크]\n"
-    content += get_toss_info() + "\n\n"
-    content += get_naver_info() + "\n\n"
-    content += get_kakao_info() + "\n\n"
-    content += get_kb_info() + "\n\n"
-    content += get_shinhan_info() + "\n\n"
-    content += get_hana_info() + "\n\n"
-    content += "="*30 + "\n"
-    content += "💡 앱 버튼을 눌러 바로 이동하세요!"
-    
-    return content
+    data = [
+        f"📅 업데이트 시간: {now}",
+        "",
+        "💰 오늘 참여 가능한 이벤트",
+        "",
+        "토스 만보기 참여 가능",
+        "토스 친구 켜기 이벤트 진행중",
+        "",
+        "네이버 포인트 뽑기 진행중",
+        "",
+        "카카오 퀴즈 참여 가능",
+        "",
+        "KB 오늘의 퀴즈 있음",
+        "",
+        "신한 퀴즈팡팡 참여 가능",
+        "",
+        "하나 출석 체크 가능",
+    ]
 
-# 3. 깃허브 레포지토리 업데이트 함수
-def update_github_repo(content):
-    if not GITHUB_TOKEN:
-        print("❌ GITHUB_TOKEN이 설정되지 않았습니다.")
-        return
+    return "\n".join(data)
 
-    try:
-        # 깃허브 로그인 및 레포지토리 연결
-        g = Github(GITHUB_TOKEN)
-        repo = g.get_repo(f"{USER_ID}/{REPO_NAME}")
-        
-        file_path = "data.txt"
-        commit_message = f"업데이트: 포인트 정보 갱신 ({datetime.now().strftime('%m/%d %H:%M')})"
 
-        try:
-            # 기존 파일이 있는지 확인
-            contents = repo.get_contents(file_path)
-            # 파일이 있으면 업데이트 (Update)
-            repo.update_file(contents.path, commit_message, content, contents.sha)
-            print("✅ 깃허브 data.txt 업데이트 성공!")
-        except:
-            # 파일이 없으면 새로 생성 (Create)
-            repo.create_file(file_path, commit_message, content)
-            print("✅ 깃허브 data.txt 새로 생성 성공!")
+def update_github(content):
+    sha = get_file_sha()
 
-    except Exception as e:
-        print(f"❌ 깃허브 업데이트 중 오류 발생: {e}")
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json"
+    }
+
+    encoded_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+
+    payload = {
+        "message": "🤖 auto update data.txt",
+        "content": encoded_content,
+        "branch": "main"
+    }
+
+    if sha:
+        payload["sha"] = sha
+
+    res = requests.put(API_URL, headers=headers, json=payload)
+
+    if res.status_code in [200, 201]:
+        print("✅ 업데이트 성공")
+    else:
+        print("❌ 실패")
+        print(res.text)
+
 
 if __name__ == "__main__":
-    new_data = generate_content()
-    update_github_repo(new_data)
+    content = collect_data()
+    update_github(content)
