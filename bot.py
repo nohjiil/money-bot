@@ -1,61 +1,46 @@
 import os, requests, base64
 from datetime import datetime
 
-print("🔥 CLEAN UPDATE 실행")
+print("🔥🔥🔥 BOT 실행됨 🔥🔥🔥")
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
-FILE_PATH = "data.txt"
 
-API_URL = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/{FILE_PATH}"
+url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
 
-
-def make_content():
+def run():
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    return "\n".join([
-        f"📅 업데이트 시간: {now}",
-        "",
-        "✅ 실시간 포인트 정보 (정답/적립)",
-        "----------------------------------",
-        "• 토스 테스트",
-        "• 네이버 테스트",
-        "• 카카오 테스트",
-        "• KB 테스트",
-        "• 신한 테스트",
-        "• 하나 테스트"
-    ])
+    text = f"""🔥 업데이트 성공 🔥
+시간: {now}
+"""
 
+    print("📡 업로드 시작")
 
-def update():
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json"
     }
 
-    # 👉 기존 파일 무조건 가져오기
-    res = requests.get(API_URL, headers=headers)
+    res = requests.get(url, headers=headers)
+    sha = res.json()["sha"] if res.status_code == 200 else None
 
-    if res.status_code == 200:
-        sha = res.json()["sha"]
-    else:
-        sha = None
-
-    content = make_content()
-    encoded = base64.b64encode(content.encode()).decode()
+    content = base64.b64encode(text.encode()).decode()
 
     data = {
-        "message": "🔥 FORCE CLEAN UPDATE",
-        "content": encoded,
-        "sha": sha  # 👉 반드시 포함 (덮어쓰기 핵심)
+        "message": "update",
+        "content": content
     }
 
-    res = requests.put(API_URL, headers=headers, json=data)
+    if sha:
+        data["sha"] = sha
 
-    print("📡 상태:", res.status_code)
+    res = requests.put(url, headers=headers, json=data)
+
+    print("결과:", res.status_code)
     print(res.text)
 
 
 if __name__ == "__main__":
-    update()
+    run()
