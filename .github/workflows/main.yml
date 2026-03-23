@@ -1,20 +1,30 @@
 name: Point-Bot-Automation
+
 on:
   schedule:
-    # 한국 시간(KST) 기준: 09:00, 12:00, 15:00, 18:00, 21:00, 00:00 실행
-    # UTC 기준으로는 9시간을 빼야 해서 아래와 같이 설정합니다.
-    - cron: '0 0,3,6,9,12,15 * * *' 
-  workflow_dispatch: # 언제든 수동으로 돌리고 싶을 때 버튼 사용
+    # 🚀 한국 시간 기준 (UTC+9 계산)
+    - cron: '0 0 * * *'  # 오전 09:00 (UTC 00:00)
+    - cron: '0 3 * * *'  # 오후 12:00 (UTC 03:00)
+    - cron: '0 9 * * *'  # 오후 18:00 (UTC 09:00)
+  workflow_dispatch:      # 🚀 사장님이 폰으로 누르는 '수동 버튼' (유지)
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - run: pip install requests beautifulsoup4
-      - name: Run Robot
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: Run Bot
         env:
-          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python bot.py
