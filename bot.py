@@ -1,131 +1,121 @@
-import os
-import requests
-import base64
-from datetime import datetime
+import requests, base64, os, re, time
 from bs4 import BeautifulSoup
+from datetime import datetime
 
-# 🔑 설정
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 USER_ID = "nohjiil"
 REPO_NAME = "money-bot"
-FILE_PATH = "data.txt"
 
-API_URL = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/{FILE_PATH}"
+def get_rich():
+    targets = [
+        {"url": "https://www.ppomppu.co.kr/zboard/zboard.php?id=coupon", "base": "https://www.ppomppu.co.kr/zboard/"},
+        {"url": "https://www.clien.net/service/board/jirum", "base": "https://www.clien.net"}
+    ]
 
+    headers = {'User-Agent': 'Mozilla/5.0'}
 
-# 📌 기존 파일 SHA 가져오기
-def get_file_sha():
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    res = requests.get(API_URL, headers=headers)
+    include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "하나"]
+    exclude_kws = ["핫딜", "쇼핑", "지마켓"]
 
-    if res.status_code == 200:
-        return res.json()["sha"]
-    return None
-
-
-# 📌 뽐뿌 크롤링
-def fetch_ppomppu():
-    url = "https://www.ppomppu.co.kr/zboard/zboard.php?id=ppomppu"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-
-    res = requests.get(url, headers=headers, timeout=10)
-    res.encoding = "euc-kr"
-
-    return res.text
-
-
-# 📌 제목 추출 + 필터링
-def extract_titles(html):
-    soup = BeautifulSoup(html, "html.parser")
-
-    results = []
+    found = []
     seen = set()
 
-    for a in soup.select("a"):
-        text = a.get_text(strip=True)
+    for target in targets:
+        try:
+            res = requests.get(target['url'], headers=headers, timeout=10)
+            if "ppomppu" in target['url']:
+                res.encoding = 'euc-kr'
 
-        # 🔥 핵심 필터 (돈 되는 키워드만)
-        if not any(k in text for k in ["토스", "네이버", "카카오", "KB", "신한", "하나"]):
+            soup = BeautifulSoup(res.text, 'html.parser')
+
+            for a in soup.select('a'):
+                title_txt = a.get_text().strip()
+                href = a.get('href', '')
+
+                if not any(k in title_txt for k in include_kws):
+                    continue
+                if any(e in title_txt for e in exclude_kws):
+                    continue
+                if len(title_txt) < 6:
+                    continue
+
+                if title_txt in seen:
+                    continue
+                seen.add(title_txt)
+
+                full_url = href if href.startswith('http') else target['base'] + href
+
+                ans = ""
+
+                try:
+                    time.sleep(0.7)
+                    p_res = requests.get(full_url, headers=headers, timeout=7)
+                    if "ppomppu" in full_url:
+                        p_res.encoding = 'euc-kr'
+
+                    p_soup = BeautifulSoup(p_res.text, 'html.parser')
+                    body = p_soup.get_text()
+
+                    # 정답 찾기
+                    m = re.search(r'(정답|답)[^\w]?[:=]?\s*([^\s,.<>]{2,15})', body)
+                    if m:
+                        ans = m.group(2)
+
+                except:
+                    pass
+
+                # 👉 미리보기 제거 / 정답만
+                if ans:
+                    text = f"• {title_txt} [정답: {ans}]"
+                else:
+                    text = f"• {title_txt}"
+
+                found.append(text)
+
+                if len(found) >= 25:
+                    break
+
+            if len(found) >= 25:
+                break
+
+        except:
             continue
 
-        # ❌ 제거 대상
-        if "미리보기" in text:
-            continue
-        if "댓글" in text:
-            continue
-        if len(text) < 8:
-            continue
-
-        # 중복 제거
-        if text in seen:
-            continue
-        seen.add(text)
-
-        results.append(text)
-
-    return results[:25]  # 최대 25개
-
-
-# 📌 data.txt 생성
-def make_content():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    try:
-        html = fetch_ppomppu()
-        titles = extract_titles(html)
-
-        if not titles:
-            titles = ["❌ 데이터를 가져오지 못했습니다"]
-
-    except Exception as e:
-        titles = [f"❌ 오류 발생: {str(e)}"]
-
-    lines = [
+    # 👉 🔥 핵심 수정 (HTML 제거)
+    final_text = "\n".join([
         f"📅 업데이트 시간: {now}",
         "",
         "✅ 실시간 포인트 정보 (정답/적립)",
         "----------------------------------",
-    ]
+        *found
+    ])
 
-    for t in titles:
-        lines.append(f"• {t}")
+    # GitHub 업로드
+    url = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/data.txt"
+    headers = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
 
-    return "\n".join(lines)
+    try:
+        res = requests.get(url, headers=headers)
+        sha = res.json().get("sha") if res.status_code == 200 else None
 
+        content = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
-# 📌 GitHub 업데이트
-def update_github(content):
-    sha = get_file_sha()
+        data = {
+            "message": "clean update",
+            "content": content
+        }
 
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json"
-    }
+        if sha:
+            data["sha"] = sha
 
-    encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+        requests.put(url, json=data, headers=headers)
 
-    data = {
-        "message": "🤖 auto update (real data)",
-        "content": encoded,
-        "branch": "main"
-    }
-
-    if sha:
-        data["sha"] = sha
-
-    res = requests.put(API_URL, headers=headers, json=data)
-
-    if res.status_code in [200, 201]:
-        print("✅ 업데이트 성공")
-    else:
-        print("❌ 실패")
-        print(res.text)
+    except Exception as e:
+        print("업로드 실패:", e)
 
 
-# 🚀 실행
 if __name__ == "__main__":
-    content = make_content()
-    update_github(content)
+    print("🔥 실행됨")
+    get_rich()
