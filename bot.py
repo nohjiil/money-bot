@@ -11,7 +11,6 @@ API_URL = f"https://api.github.com/repos/{USER_ID}/{REPO_NAME}/contents/{FILE_PA
 
 HEADERS = {'User-Agent': 'Mozilla/5.0'}
 
-# ✅ 키워드 필터 (필요하면 추가)
 INCLUDE = ["토스", "네이버", "카카오", "KB", "신한", "하나"]
 EXCLUDE = ["핫딜", "쇼핑", "지마켓", "옥션", "쿠팡"]
 
@@ -56,7 +55,6 @@ def crawl():
 
                 answer = ""
 
-                # 👉 상세 페이지 들어가서 정답 찾기
                 try:
                     time.sleep(0.7)
                     r = requests.get(link, headers=HEADERS, timeout=7)
@@ -73,7 +71,6 @@ def crawl():
                 except:
                     pass
 
-                # 👉 출력 형태 (미리보기 없음)
                 if answer:
                     results.append(f"• {title} [정답: {answer}]")
                 else:
@@ -94,12 +91,17 @@ def crawl():
 def make_text(items):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    if items:
+        body = items
+    else:
+        body = ["⏳ 정보 수집 중..."]
+
     return "\n".join([
         f"📅 업데이트 시간: {now}",
         "",
         "✅ 실시간 포인트 정보 (정답/적립)",
         "----------------------------------",
-        *items if items else ["⏳ 정보 수집 중..."]
+        *body
     ])
 
 
