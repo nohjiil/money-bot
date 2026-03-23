@@ -14,6 +14,29 @@ HEADERS = {'User-Agent': 'Mozilla/5.0'}
 INCLUDE = ["토스", "네이버", "카카오", "KB", "신한", "하나"]
 EXCLUDE = ["핫딜", "쇼핑", "지마켓", "옥션", "쿠팡"]
 
+# ❗ 쓰레기 정답 필터
+BAD_ANS = ["정보", "내용", "확인", "참고", "링크", "클릭", "공지"]
+
+
+def extract_answer(text):
+    answer = ""
+
+    # 1️⃣ 기본 정답 패턴
+    m = re.search(r'(정답|답)[^\w]?[:=]?\s*([^\s,.<>]{1,10})', text)
+    if m:
+        candidate = m.group(2).strip()
+
+        if candidate not in BAD_ANS and len(candidate) >= 1:
+            answer = candidate
+
+    # 2️⃣ OX 퀴즈 대응
+    if not answer:
+        m2 = re.search(r'\b(O|X)\b', text)
+        if m2:
+            answer = m2.group(1)
+
+    return answer
+
 
 def crawl():
     sources = [
@@ -64,9 +87,7 @@ def crawl():
 
                     text = BeautifulSoup(r.text, "html.parser").get_text()
 
-                    m = re.search(r'(정답|답)[^\w]?[:=]?\s*([^\s,.<>]{2,15})', text)
-                    if m:
-                        answer = m.group(2)
+                    answer = extract_answer(text)
 
                 except:
                     pass
