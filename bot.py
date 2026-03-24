@@ -44,7 +44,7 @@ def get_real_data():
                         full_url = href if href.startswith('http') else target['base'] + href
                         ans = ""
 
-                        # 🚀 [수정] 제목 끝에 1글자 정답(O, X, 1 등)도 허용!
+                        # 제목 끝 정답 낚시 (1글자 허용)
                         t_match = re.search(r'[-:]\s*([^\s]{1,10})$', title_txt)
                         if t_match:
                             cand = t_match.group(1).strip()
@@ -52,8 +52,9 @@ def get_real_data():
                                 ans = cand
 
                         try:
-                            time.sleep(1.0)
-                            p_res = requests.get(full_url, headers=headers, timeout=7)
+                            time.sleep(1.0) # 서버 차단 방지
+                            # 🚀 [조정 완료] 봇의 인내심을 7초 -> 15초로 2배 이상 늘렸습니다! 꾹 참을 겁니다!
+                            p_res = requests.get(full_url, headers=headers, timeout=15)
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             for s in p_soup(['script', 'style', 'img', 'iframe', 'title']): s.decompose()
@@ -72,7 +73,7 @@ def get_real_data():
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
                             body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
-                            # 🚀 [수정] 본문에서 1글자 정답(O, X) 허용!
+                            # 본문에서 정답 수색 (1글자 허용)
                             if not ans or len(ans) < 1:
                                 m = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_cut)
                                 if m: 
@@ -88,7 +89,7 @@ def get_real_data():
                             if ans and ans in title_txt and not title_txt.endswith(ans):
                                 ans = "" 
 
-                            # 🚀 [수정] 정답 길이가 1글자 이상이면 무조건 출력!
+                            # 정답 출력
                             if ans and len(ans) >= 1:
                                 info = f" [정답: {ans}]"
                             else:
@@ -99,8 +100,9 @@ def get_real_data():
                                 else:
                                     info = f" [미리보기: {clean_preview[:20]}...]"
                         except:
+                            # 7초 대기하다 지연되었을 때!
                             info = " [연결지연]"
-
+                        
                         clean_t = title_txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
                         if len(found) >= 30: break
@@ -109,10 +111,11 @@ def get_real_data():
     return found
 
 # ====================
-# 실행 및 업로드
+# 실행 및 업로드 로직 (사장님 코드 기반!)
 # ====================
 items = get_real_data()
 
+# 한국 시간으로 세팅
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
@@ -129,7 +132,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: allow 1-character answers like O, X", "content": encoded, "branch": BRANCH}
+data = {"message": "adjust: increase timeout patience bot", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
