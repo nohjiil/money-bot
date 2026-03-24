@@ -26,8 +26,6 @@ def get_real_data():
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "하나", "원큐", "스타뱅킹", "플레이"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", "지마켓", "AI 키워", "키워드"]
 
-    garbage_keywords = ["휴대폰업체", "인터넷가입", "카드업체", "렌탈업체", "보험업체", "공감글", "커뮤니티", "모두의광장", "테마설정", "게시판 분류"]
-
     found = []
     for target in targets:
         try:
@@ -44,26 +42,18 @@ def get_real_data():
                         full_url = href if href.startswith('http') else target['base'] + href
                         ans = ""
 
-                        # 제목 끝 정답 낚시 (1글자 허용)
-                        t_match = re.search(r'[-:]\s*([^\s]{1,10})$', title_txt)
-                        if t_match:
-                            cand = t_match.group(1).strip()
-                            if cand not in ["정답", "퀴즈", "소진", "종료", "완료"]:
-                                ans = cand
-
                         try:
-                            time.sleep(1.0) # 서버 차단 방지
-                            # 🚀 [조정 완료] 봇의 인내심을 7초 -> 15초로 2배 이상 늘렸습니다! 꾹 참을 겁니다!
+                            time.sleep(1.0)
                             p_res = requests.get(full_url, headers=headers, timeout=15)
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
-                            for s in p_soup(['script', 'style', 'img', 'iframe', 'title']): s.decompose()
+                            for s in p_soup(['script', 'style', 'img', 'iframe', 'title', 'head', 'header', 'nav', 'footer']): s.decompose()
 
                             content_elem = None
                             if "ppomppu" in full_url:
-                                content_elem = p_soup.select_one('td.board-contents') or p_soup.select_one('.board-contents')
+                                content_elem = p_soup.select_one('.board-contents, td.board-contents, table.pic_bg')
                             else:
-                                content_elem = p_soup.select_one('.post_content') or p_soup.select_one('.post_article')
+                                content_elem = p_soup.select_one('.post_content, .post_article')
 
                             if content_elem:
                                 body_raw = content_elem.get_text(separator=' ')
@@ -71,38 +61,55 @@ def get_real_data():
                                 body_raw = p_soup.get_text(separator=' ')
 
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
-                            body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
-                            # 본문에서 정답 수색 (1글자 허용)
-                            if not ans or len(ans) < 1:
-                                m = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_cut)
-                                if m: 
-                                    ans = m.group(2).strip()
-                                else:
-                                    m2 = re.search(r'([^\s,.<>]{1,15})\s*-\s*정답', body_cut)
-                                    if m2: ans = m2.group(1).strip()
+                            # 🚀 보기 흉한 메뉴판 텍스트만 살짝 지워줍니다. (안 그러면 미리보기가 전부 휴대폰업체로 도배됨)
+                            garbage_strs = [
+                                "뽐뿌 휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
+                                "휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
+                                "공감글 커뮤니티 커뮤니티전체 C 모두의광장 F 모두의공원 I",
+                                "게시판 분류"
+                            ]
+                            for gb in garbage_strs:
+                                body_c = body_c.replace(gb, "")
+                                
+                            body_c = re.sub(r'.*?조회수?\s*[:]?\s*[\d,]+\s*', '', body_c)
+                            body_c = re.sub(r'.*?추천수?\s*[:]?\s*[\d,]+\s*', '', body_c)
 
-                            ans = ans.replace(")", "").replace("(", "").strip()
-                            if ans in ["정답", "퀴즈", "소진", "하세요", "이벤트", "안내"]:
-                                ans = ""
+                            # 🚀 [사장님 지시 2] 제목에 '퀴즈' 단어가 들어갔을 때만 정답 낚시 시작!
+                            if "퀴즈" in title_txt:
+                                t_match = re.search(r'[-:]\s*([^\s]{1,10})$', title_txt)
+                                if t_match:
+                                    cand = t_match.group(1).strip()
+                                    if cand not in ["정답", "퀴즈", "소진", "종료", "완료"]:
+                                        ans = cand
 
-                            if ans and ans in title_txt and not title_txt.endswith(ans):
-                                ans = "" 
+                                # 🚀 [사장님 지시 1] 도끼질 폐지! 잘라내지 않고 본문 전체에서 정답 수색 (X 같은 1글자도 찾음)
+                                if not ans or len(ans) < 1:
+                                    m = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_c)
+                                    if m: 
+                                        ans = m.group(2).strip()
+                                    else:
+                                        m2 = re.search(r'([^\s,.<>]{1,15})\s*-\s*정답', body_c)
+                                        if m2: ans = m2.group(1).strip()
 
-                            # 정답 출력
+                                ans = ans.replace(")", "").replace("(", "").strip()
+                                if ans in ["정답", "퀴즈", "소진", "하세요", "이벤트", "안내"]:
+                                    ans = ""
+                                if ans and ans in title_txt and not title_txt.endswith(ans):
+                                    ans = "" 
+
+                            # 🚀 [사장님 지시 3] 빈칸으로 날리지 말고, 무조건 22글자 제한으로 미리보기 띄우기!
                             if ans and len(ans) >= 1:
                                 info = f" [정답: {ans}]"
                             else:
-                                clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_cut).strip()
-                                
-                                if any(gb in clean_preview for gb in garbage_keywords) or len(clean_preview) < 3:
-                                    info = "" 
+                                clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_c).strip()
+                                if len(clean_preview) > 0:
+                                    info = f" [미리보기: {clean_preview[:22]}...]"
                                 else:
-                                    info = f" [미리보기: {clean_preview[:20]}...]"
+                                    info = " [미리보기: 본문 확인]"
                         except:
-                            # 7초 대기하다 지연되었을 때!
                             info = " [연결지연]"
-                        
+
                         clean_t = title_txt.split('\n')[0][:25]
                         found.append(f"• {clean_t}{info}")
                         if len(found) >= 30: break
@@ -111,11 +118,10 @@ def get_real_data():
     return found
 
 # ====================
-# 실행 및 업로드 로직 (사장님 코드 기반!)
+# 실행 및 업로드
 # ====================
 items = get_real_data()
 
-# 한국 시간으로 세팅
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
@@ -132,7 +138,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "adjust: increase timeout patience bot", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: apply user genius logic (quiz filter & preview length)", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
