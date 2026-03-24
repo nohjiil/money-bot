@@ -1,6 +1,6 @@
 import requests
 import base64
-from datetime import datetime, timedelta # 🚀 시간 계산용 timedelta 추가
+from datetime import datetime, timedelta
 import os
 import re
 import time
@@ -15,7 +15,7 @@ BRANCH = "main"
 TOKEN = os.environ.get("GITHUB_TOKEN")
 
 # ====================
-# 진짜 데이터 수집 엔진 (시간 & 미리보기 오류 수정)
+# 진짜 데이터 수집 엔진
 # ====================
 def get_real_data():
     targets = [
@@ -54,10 +54,15 @@ def get_real_data():
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             
-                            # 🚀 [수리] 사이트 제목(title), 헤더(head) 등 쓸데없는 껍데기는 다 날려버림!
-                            for s in p_soup(['script', 'style', 'img', 'iframe', 'title', 'head']): s.decompose()
+                            # 🚀 [수리 완료] 메뉴판 무시하고 '진짜 본문 박스'만 족집게로 집어옵니다.
+                            if "ppomppu" in full_url:
+                                content_area = p_soup.select_one('.board-contents') or p_soup.select_one('td.board-contents') or p_soup
+                            else:
+                                content_area = p_soup.select_one('.post_content') or p_soup.select_one('.post_article') or p_soup
 
-                            body_raw = p_soup.get_text()
+                            for s in content_area(['script', 'style', 'img', 'iframe']): s.decompose()
+
+                            body_raw = content_area.get_text()
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
                             body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
@@ -79,7 +84,6 @@ def get_real_data():
                             if ans and len(ans) >= 2:
                                 info = f" [정답: {ans}]"
                             else:
-                                # 미리보기에 '뽐뿌::' 같은 쓰레기 텍스트가 안 나오고 진짜 알맹이만 나옵니다.
                                 info = f" [미리보기: {body_cut[:35]}...]"
                         except:
                             info = " [연결지연]"
@@ -96,7 +100,6 @@ def get_real_data():
 # ====================
 items = get_real_data()
 
-# 🚀 [수리] 깃허브 서버 시간(UTC)에 9시간을 더해서 완벽한 한국 시간(KST)으로 맞춤!
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
@@ -113,7 +116,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: KST timezone and clean preview", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: grab precise post content", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
