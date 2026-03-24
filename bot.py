@@ -26,6 +26,9 @@ def get_real_data():
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "하나", "원큐", "스타뱅킹", "플레이"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", "지마켓", "AI 키워", "키워드"]
 
+    # 🚀 [사장님 아이디어 적용] 출력 제한을 위한 쓰레기 단어 블랙리스트
+    garbage_keywords = ["휴대폰업체", "인터넷가입", "카드업체", "렌탈업체", "보험업체", "공감글", "커뮤니티", "모두의광장", "테마설정"]
+
     found = []
     for target in targets:
         try:
@@ -55,23 +58,18 @@ def get_real_data():
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             for s in p_soup(['script', 'style', 'img', 'iframe']): s.decompose()
 
-                            # 🚀 [수술 완료] 사이트별로 '진짜 본문 박스'만 뜯어냅니다.
+                            content_elem = None
                             if "ppomppu" in full_url:
-                                content_elem = p_soup.select_one('.board-contents')
+                                content_elem = p_soup.select_one('td.board-contents') or p_soup.select_one('.board-contents')
                             else:
                                 content_elem = p_soup.select_one('.post_content') or p_soup.select_one('.post_article')
 
-                            # 박스를 찾았으면 박스 안 글자만, 못 찾았으면 차선책(조회수 기준 자르기)
                             if content_elem:
                                 body_raw = content_elem.get_text(separator=' ')
                             else:
                                 body_raw = p_soup.get_text(separator=' ')
-                                if "ppomppu" in full_url:
-                                    body_raw = re.split(r'조회수\s*:\s*[\d,]+', body_raw)[-1] # 조회수 이전의 메뉴판은 다 버림
 
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
-                            body_c = re.sub(r'^(추천\s*:\s*\d+\s*)?', '', body_c).strip() # 앞부분 쓰레기 제거
-                            
                             body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
                             if not ans or len(ans) < 2:
@@ -83,7 +81,7 @@ def get_real_data():
                                     if m2: ans = m2.group(1).strip()
 
                             ans = ans.replace(")", "").replace("(", "").strip()
-                            if ans in ["정답", "퀴즈", "소진", "하세요"]:
+                            if ans in ["정답", "퀴즈", "소진", "하세요", "이벤트"]:
                                 ans = ""
 
                             if ans and ans in title_txt and not title_txt.endswith(ans):
@@ -93,7 +91,12 @@ def get_real_data():
                                 info = f" [정답: {ans}]"
                             else:
                                 clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_cut).strip()
-                                info = f" [미리보기: {clean_preview[:35]}...]"
+                                
+                                # 🚀 [사장님 아이디어 적용] 블랙리스트 단어가 감지되면 출력 제한!
+                                if any(gb in clean_preview for gb in garbage_keywords):
+                                    info = " [👉 본문에서 링크 확인]"
+                                else:
+                                    info = f" [미리보기: {clean_preview[:20]}...]"
                         except:
                             info = " [연결지연]"
 
@@ -125,7 +128,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: perfect content box extraction", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: apply output restriction idea", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
