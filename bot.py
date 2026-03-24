@@ -26,8 +26,7 @@ def get_real_data():
     include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "하나", "원큐", "스타뱅킹", "플레이"]
     exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", "지마켓", "AI 키워", "키워드"]
 
-    # 🚀 [사장님 아이디어 적용] 출력 제한을 위한 쓰레기 단어 블랙리스트
-    garbage_keywords = ["휴대폰업체", "인터넷가입", "카드업체", "렌탈업체", "보험업체", "공감글", "커뮤니티", "모두의광장", "테마설정"]
+    garbage_keywords = ["휴대폰업체", "인터넷가입", "카드업체", "렌탈업체", "보험업체", "공감글", "커뮤니티", "모두의광장", "테마설정", "게시판 분류"]
 
     found = []
     for target in targets:
@@ -56,7 +55,7 @@ def get_real_data():
                             p_res = requests.get(full_url, headers=headers, timeout=7)
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
-                            for s in p_soup(['script', 'style', 'img', 'iframe']): s.decompose()
+                            for s in p_soup(['script', 'style', 'img', 'iframe', 'title']): s.decompose()
 
                             content_elem = None
                             if "ppomppu" in full_url:
@@ -81,7 +80,7 @@ def get_real_data():
                                     if m2: ans = m2.group(1).strip()
 
                             ans = ans.replace(")", "").replace("(", "").strip()
-                            if ans in ["정답", "퀴즈", "소진", "하세요", "이벤트"]:
+                            if ans in ["정답", "퀴즈", "소진", "하세요", "이벤트", "안내"]:
                                 ans = ""
 
                             if ans and ans in title_txt and not title_txt.endswith(ans):
@@ -92,9 +91,9 @@ def get_real_data():
                             else:
                                 clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_cut).strip()
                                 
-                                # 🚀 [사장님 아이디어 적용] 블랙리스트 단어가 감지되면 출력 제한!
-                                if any(gb in clean_preview for gb in garbage_keywords):
-                                    info = " [👉 본문에서 링크 확인]"
+                                # 🚀 [수정 완료] 사장님 말씀대로 쓰레기 단어가 감지되면 아예 빈칸("")으로 날려버립니다!
+                                if any(gb in clean_preview for gb in garbage_keywords) or len(clean_preview) < 3:
+                                    info = "" 
                                 else:
                                     info = f" [미리보기: {clean_preview[:20]}...]"
                         except:
@@ -128,7 +127,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: apply output restriction idea", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: remove garbage output completely", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
