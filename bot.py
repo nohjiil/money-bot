@@ -15,7 +15,7 @@ BRANCH = "main"
 TOKEN = os.environ.get("GITHUB_TOKEN")
 
 # ====================
-# 진짜 데이터 수집 엔진 (어제 만든 최강 로직)
+# 진짜 데이터 수집 엔진 (안전장치 장착 완료)
 # ====================
 def get_real_data():
     targets = [
@@ -42,9 +42,13 @@ def get_real_data():
                         full_url = href if href.startswith('http') else target['base'] + href
                         ans = ""
 
-                        # 1. 제목 끝 정답 낚시 (- 다이어리 등)
-                        t_match = re.search(r'[-\s:답]+([^\s]{2,10})$', title_txt)
-                        if t_match: ans = t_match.group(1).strip()
+                        # 🚀 [수술 1] 하이픈(-)이나 콜론(:)이 있을 때만 제목 끝 정답 인정!
+                        t_match = re.search(r'[-:]\s*([^\s]{2,10})$', title_txt)
+                        if t_match:
+                            cand = t_match.group(1).strip()
+                            # 🚀 [수술 2] '정답', '퀴즈' 같은 함정 단어는 버림!
+                            if cand not in ["정답", "퀴즈", "소진", "종료", "완료"]:
+                                ans = cand
 
                         try:
                             time.sleep(1.0)
@@ -55,9 +59,10 @@ def get_real_data():
 
                             body_raw = p_soup.get_text()
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
-                            body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0]
+                            
+                            # 🚀 [수술 3] '하세요' 뒤에 붙는 쓸데없는 말 절단!
+                            body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
-                            # 2. 본문 정밀 수색
                             if not ans or len(ans) < 2:
                                 m = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_cut)
                                 if m: 
@@ -66,7 +71,11 @@ def get_real_data():
                                     m2 = re.search(r'([^\s,.<>]{2,15})\s*-\s*정답', body_cut)
                                     if m2: ans = m2.group(1).strip()
 
-                            # 제목 중간에 있는 가짜 정답(황금열매 등) 배제
+                            # 🚀 [수술 4] 괄호 ) 같은 찌꺼기 청소 및 최종 블랙리스트 검사
+                            ans = ans.replace(")", "").replace("(", "").strip()
+                            if ans in ["정답", "퀴즈", "소진", "하세요"]:
+                                ans = ""
+
                             if ans and ans in title_txt and not title_txt.endswith(ans):
                                 ans = "" 
 
@@ -85,7 +94,7 @@ def get_real_data():
     return found
 
 # ====================
-# 실행 및 업로드 로직 (사장님 코드 그대로!)
+# 실행 및 업로드
 # ====================
 items = get_real_data()
 
@@ -103,7 +112,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "update from money-bot", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: crazy stupid answer bug", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
