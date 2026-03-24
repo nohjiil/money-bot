@@ -1,6 +1,6 @@
 import requests
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta # 🚀 시간 계산용 timedelta 추가
 import os
 import re
 import time
@@ -15,7 +15,7 @@ BRANCH = "main"
 TOKEN = os.environ.get("GITHUB_TOKEN")
 
 # ====================
-# 진짜 데이터 수집 엔진 (안전장치 장착 완료)
+# 진짜 데이터 수집 엔진 (시간 & 미리보기 오류 수정)
 # ====================
 def get_real_data():
     targets = [
@@ -42,11 +42,9 @@ def get_real_data():
                         full_url = href if href.startswith('http') else target['base'] + href
                         ans = ""
 
-                        # 🚀 [수술 1] 하이픈(-)이나 콜론(:)이 있을 때만 제목 끝 정답 인정!
                         t_match = re.search(r'[-:]\s*([^\s]{2,10})$', title_txt)
                         if t_match:
                             cand = t_match.group(1).strip()
-                            # 🚀 [수술 2] '정답', '퀴즈' 같은 함정 단어는 버림!
                             if cand not in ["정답", "퀴즈", "소진", "종료", "완료"]:
                                 ans = cand
 
@@ -55,12 +53,12 @@ def get_real_data():
                             p_res = requests.get(full_url, headers=headers, timeout=7)
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
-                            for s in p_soup(['script', 'style', 'img', 'iframe']): s.decompose()
+                            
+                            # 🚀 [수리] 사이트 제목(title), 헤더(head) 등 쓸데없는 껍데기는 다 날려버림!
+                            for s in p_soup(['script', 'style', 'img', 'iframe', 'title', 'head']): s.decompose()
 
                             body_raw = p_soup.get_text()
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
-                            
-                            # 🚀 [수술 3] '하세요' 뒤에 붙는 쓸데없는 말 절단!
                             body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
                             if not ans or len(ans) < 2:
@@ -71,7 +69,6 @@ def get_real_data():
                                     m2 = re.search(r'([^\s,.<>]{2,15})\s*-\s*정답', body_cut)
                                     if m2: ans = m2.group(1).strip()
 
-                            # 🚀 [수술 4] 괄호 ) 같은 찌꺼기 청소 및 최종 블랙리스트 검사
                             ans = ans.replace(")", "").replace("(", "").strip()
                             if ans in ["정답", "퀴즈", "소진", "하세요"]:
                                 ans = ""
@@ -82,6 +79,7 @@ def get_real_data():
                             if ans and len(ans) >= 2:
                                 info = f" [정답: {ans}]"
                             else:
+                                # 미리보기에 '뽐뿌::' 같은 쓰레기 텍스트가 안 나오고 진짜 알맹이만 나옵니다.
                                 info = f" [미리보기: {body_cut[:35]}...]"
                         except:
                             info = " [연결지연]"
@@ -98,8 +96,11 @@ def get_real_data():
 # ====================
 items = get_real_data()
 
-now = datetime.now().strftime("%Y-%m-%d %H:%M")
-header = f"🗓️ 업데이트 시간: {now}\n\n✅ 실시간 포인트 정보 (정답/적립)\n------------------------\n\n"
+# 🚀 [수리] 깃허브 서버 시간(UTC)에 9시간을 더해서 완벽한 한국 시간(KST)으로 맞춤!
+now_kst = datetime.utcnow() + timedelta(hours=9)
+now_str = now_kst.strftime("%Y-%m-%d %H:%M")
+
+header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 실시간 포인트 정보 (정답/적립)\n------------------------\n\n"
 body = "<br>".join(items) if items else "⏳ 정보 수집 중..."
 final_text = header + body
 
@@ -112,7 +113,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: crazy stupid answer bug", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: KST timezone and clean preview", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
