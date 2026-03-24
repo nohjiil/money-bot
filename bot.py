@@ -62,7 +62,6 @@ def get_real_data():
 
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
 
-                            # 🚀 보기 흉한 메뉴판 텍스트만 살짝 지워줍니다. (안 그러면 미리보기가 전부 휴대폰업체로 도배됨)
                             garbage_strs = [
                                 "뽐뿌 휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
                                 "휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
@@ -72,10 +71,11 @@ def get_real_data():
                             for gb in garbage_strs:
                                 body_c = body_c.replace(gb, "")
                                 
-                            body_c = re.sub(r'.*?조회수?\s*[:]?\s*[\d,]+\s*', '', body_c)
-                            body_c = re.sub(r'.*?추천수?\s*[:]?\s*[\d,]+\s*', '', body_c)
+                            # 🚀 [치명적 버그 수정] 본문 전체를 날려버리던 무식한 지우개 압수! 해당 단어만 살짝 지웁니다.
+                            body_c = re.sub(r'(등록일|작성일)\s*[:]?\s*[\d-]+\s*[\d:]+\s*', '', body_c)
+                            body_c = re.sub(r'조회수?\s*[:]?\s*[\d,]+\s*', '', body_c)
+                            body_c = re.sub(r'추천수?\s*[:]?\s*[\d,]+\s*', '', body_c)
 
-                            # 🚀 [사장님 지시 2] 제목에 '퀴즈' 단어가 들어갔을 때만 정답 낚시 시작!
                             if "퀴즈" in title_txt:
                                 t_match = re.search(r'[-:]\s*([^\s]{1,10})$', title_txt)
                                 if t_match:
@@ -83,7 +83,6 @@ def get_real_data():
                                     if cand not in ["정답", "퀴즈", "소진", "종료", "완료"]:
                                         ans = cand
 
-                                # 🚀 [사장님 지시 1] 도끼질 폐지! 잘라내지 않고 본문 전체에서 정답 수색 (X 같은 1글자도 찾음)
                                 if not ans or len(ans) < 1:
                                     m = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_c)
                                     if m: 
@@ -98,7 +97,6 @@ def get_real_data():
                                 if ans and ans in title_txt and not title_txt.endswith(ans):
                                     ans = "" 
 
-                            # 🚀 [사장님 지시 3] 빈칸으로 날리지 말고, 무조건 22글자 제한으로 미리보기 띄우기!
                             if ans and len(ans) >= 1:
                                 info = f" [정답: {ans}]"
                             else:
@@ -138,7 +136,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: apply user genius logic (quiz filter & preview length)", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: stop wiping out entire body content", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
