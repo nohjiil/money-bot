@@ -53,21 +53,25 @@ def get_real_data():
                             p_res = requests.get(full_url, headers=headers, timeout=7)
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
-                            
                             for s in p_soup(['script', 'style', 'img', 'iframe']): s.decompose()
 
-                            body_raw = p_soup.get_text()
-                            body_c = re.sub(r'\s+', ' ', body_raw).strip()
-                            
-                            # 🚀 [물리적 강제 절단기] 꼴보기 싫은 메뉴판 글씨를 통째로 잘라버립니다!
-                            if "뽐뿌핫딜 쇼핑" in body_c:
-                                body_c = body_c.split("뽐뿌핫딜 쇼핑")[-1]
-                            if "테마설정 톺아보기" in body_c:
-                                body_c = body_c.split("테마설정 톺아보기")[-1]
-                            
-                            # 조회수, 추천수 같은 잡다한 정보도 한 번 더 날림
-                            body_c = re.sub(r'.*?조회수\s*:\s*\d+.*?추천\s*\d+', '', body_c)
+                            # 🚀 [수술 완료] 사이트별로 '진짜 본문 박스'만 뜯어냅니다.
+                            if "ppomppu" in full_url:
+                                content_elem = p_soup.select_one('.board-contents')
+                            else:
+                                content_elem = p_soup.select_one('.post_content') or p_soup.select_one('.post_article')
 
+                            # 박스를 찾았으면 박스 안 글자만, 못 찾았으면 차선책(조회수 기준 자르기)
+                            if content_elem:
+                                body_raw = content_elem.get_text(separator=' ')
+                            else:
+                                body_raw = p_soup.get_text(separator=' ')
+                                if "ppomppu" in full_url:
+                                    body_raw = re.split(r'조회수\s*:\s*[\d,]+', body_raw)[-1] # 조회수 이전의 메뉴판은 다 버림
+
+                            body_c = re.sub(r'\s+', ' ', body_raw).strip()
+                            body_c = re.sub(r'^(추천\s*:\s*\d+\s*)?', '', body_c).strip() # 앞부분 쓰레기 제거
+                            
                             body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
                             if not ans or len(ans) < 2:
@@ -88,7 +92,6 @@ def get_real_data():
                             if ans and len(ans) >= 2:
                                 info = f" [정답: {ans}]"
                             else:
-                                # 앞부분에 남은 특수기호 제거 후 진짜 알맹이만!
                                 clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_cut).strip()
                                 info = f" [미리보기: {clean_preview[:35]}...]"
                         except:
@@ -122,7 +125,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: brutal menu slicer", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: perfect content box extraction", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
