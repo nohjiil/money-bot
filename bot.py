@@ -1,75 +1,110 @@
 import requests
 import base64
 from datetime import datetime
+import os
+import re
+import time
+from bs4 import BeautifulSoup
 
-# =====================
+# ====================
 # 설정
-# =====================
+# ====================
 REPO = "nohjiil/money-bot"
 FILE_PATH = "data.txt"
 BRANCH = "main"
+TOKEN = os.environ.get("GITHUB_TOKEN")
 
-TOKEN = __import__("os").environ.get("GITHUB_TOKEN")
+# ====================
+# 진짜 데이터 수집 엔진 (어제 만든 최강 로직)
+# ====================
+def get_real_data():
+    targets = [
+        {"name": "뽐뿌", "url": "https://www.ppomppu.co.kr/zboard/zboard.php?id=coupon", "base": "https://www.ppomppu.co.kr/zboard/"},
+        {"name": "클리앙", "url": "https://www.clien.net/service/board/jirum", "base": "https://www.clien.net"}
+    ]
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    include_kws = ["토스", "네이버", "카카오", "KB", "국민", "신한", "쏠", "하나", "원큐", "스타뱅킹", "플레이"]
+    exclude_kws = ["모니모", "옥션", "비트버니", "핫딜", "출석", "만보기", "쇼핑", "지마켓", "AI 키워", "키워드"]
 
-# =====================
-# 데이터 (여기에 너가 만든 리스트 넣으면 됨)
-# =====================
-items = [
-    "• [토스]260324 토스 버튼 눌러 1등 만들기 [정답: 만들기]",
-    "• [네이버페이]라방 9원, 토스트 1~3원 [정답: 라방]",
-    "• [카카오뱅크]OX 퀴즈 3/24 정답 [정답: 정답]",
-    "• [KB스타뱅킹]스타퀴즈 정답 [정답: 정답]",
-]
+    found = []
+    for target in targets:
+        try:
+            res = requests.get(target['url'], headers=headers, timeout=10)
+            if "ppomppu" in target['url']: res.encoding = 'euc-kr'
+            soup = BeautifulSoup(res.text, 'html.parser')
 
-# =====================
-# 텍스트 생성
-# =====================
+            for a in soup.select('a'):
+                title_txt = a.get_text().strip()
+                href = a.get('href', '')
+
+                if any(k in title_txt for k in include_kws) and not any(e in title_txt for e in exclude_kws):
+                    if len(title_txt) > 5 and href:
+                        full_url = href if href.startswith('http') else target['base'] + href
+                        ans = ""
+
+                        # 1. 제목 끝 정답 낚시 (- 다이어리 등)
+                        t_match = re.search(r'[-\s:답]+([^\s]{2,10})$', title_txt)
+                        if t_match: ans = t_match.group(1).strip()
+
+                        try:
+                            time.sleep(1.0)
+                            p_res = requests.get(full_url, headers=headers, timeout=7)
+                            if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
+                            p_soup = BeautifulSoup(p_res.text, 'html.parser')
+                            for s in p_soup(['script', 'style', 'img', 'iframe']): s.decompose()
+
+                            body_raw = p_soup.get_text()
+                            body_c = re.sub(r'\s+', ' ', body_raw).strip()
+                            body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0]
+
+                            # 2. 본문 정밀 수색
+                            if not ans or len(ans) < 2:
+                                m = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_cut)
+                                if m: 
+                                    ans = m.group(2).strip()
+                                else:
+                                    m2 = re.search(r'([^\s,.<>]{2,15})\s*-\s*정답', body_cut)
+                                    if m2: ans = m2.group(1).strip()
+
+                            # 제목 중간에 있는 가짜 정답(황금열매 등) 배제
+                            if ans and ans in title_txt and not title_txt.endswith(ans):
+                                ans = "" 
+
+                            if ans and len(ans) >= 2:
+                                info = f" [정답: {ans}]"
+                            else:
+                                info = f" [미리보기: {body_cut[:35]}...]"
+                        except:
+                            info = " [연결지연]"
+
+                        clean_t = title_txt.split('\n')[0][:25]
+                        found.append(f"• {clean_t}{info}")
+                        if len(found) >= 30: break
+            if len(found) >= 30: break
+        except: continue
+    return found
+
+# ====================
+# 실행 및 업로드 로직 (사장님 코드 그대로!)
+# ====================
+items = get_real_data()
+
 now = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-header = f"""📅 업데이트 시간: {now}
-
-✅ 실시간 포인트 정보 (정답/적립)
-----------------------------------
-"""
-
-body = "\n".join(items) if items else "⏳ 정보 수집 중..."
-
+header = f"🗓️ 업데이트 시간: {now}\n\n✅ 실시간 포인트 정보 (정답/적립)\n------------------------\n\n"
+body = "<br>".join(items) if items else "⏳ 정보 수집 중..."
 final_text = header + body
 
 print("🔥 BOT 실행됨")
-print(final_text)
 
-# =====================
-# 기존 파일 SHA 가져오기
-# =====================
 url = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
+h = {"Authorization": f"token {TOKEN}", "Accept": "application/vnd.github+json"}
 
-headers = {
-    "Authorization": f"token {TOKEN}",
-    "Accept": "application/vnd.github+json"
-}
+res = requests.get(url, headers=h)
+sha = res.json().get("sha") if res.status_code == 200 else None
 
-res = requests.get(url, headers=headers)
+encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
+data = {"message": "update from money-bot", "content": encoded, "branch": BRANCH}
+if sha: data["sha"] = sha
 
-sha = None
-if res.status_code == 200:
-    sha = res.json()["sha"]
-
-# =====================
-# 업로드
-# =====================
-encoded = base64.b64encode(final_text.encode()).decode()
-
-data = {
-    "message": "update",
-    "content": encoded,
-    "branch": BRANCH
-}
-
-if sha:
-    data["sha"] = sha
-
-res = requests.put(url, headers=headers, json=data)
-
-print("📡 업로드 결과:", res.status_code)
-print(res.text)
+res = requests.put(url, headers=h, json=data)
+print("🚀 업로드 결과:", res.status_code)
