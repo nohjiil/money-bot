@@ -55,6 +55,7 @@ def get_real_data():
                             else:
                                 content_elem = p_soup.select_one('.post_content, .post_article')
 
+                            # 🚀 [1단계] 선과 원 쭉쭉 다 그리기 (본문 전체 긁어오기)
                             if content_elem:
                                 body_raw = content_elem.get_text(separator=' ')
                             else:
@@ -62,6 +63,8 @@ def get_real_data():
 
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
 
+                            # 🚀 [2단계] TTR 및 트림 (필요 없는 객체 하나씩 지우기)
+                            # 2-1. 상단 메뉴판 쓰레기 선 지우기
                             garbage_strs = [
                                 "뽐뿌 휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
                                 "휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
@@ -71,11 +74,16 @@ def get_real_data():
                             for gb in garbage_strs:
                                 body_c = body_c.replace(gb, "")
                                 
-                            # 🚀 [치명적 버그 수정] 본문 전체를 날려버리던 무식한 지우개 압수! 해당 단어만 살짝 지웁니다.
+                            # 2-2. 치수선 같은 '조회수', '추천수' 딱 그 부분만 도려내기
                             body_c = re.sub(r'(등록일|작성일)\s*[:]?\s*[\d-]+\s*[\d:]+\s*', '', body_c)
                             body_c = re.sub(r'조회수?\s*[:]?\s*[\d,]+\s*', '', body_c)
                             body_c = re.sub(r'추천수?\s*[:]?\s*[\d,]+\s*', '', body_c)
 
+                            # 2-3. '하세요', 'PS' 같은 단어도 통째로 날리지 않고 딱 그 글자만 지우개로 톡톡 지우기
+                            for word in ["PS", "추신", "참고", "하세요"]:
+                                body_c = body_c.replace(word, "")
+
+                            # 🚀 [3단계] 퀴즈 필터 적용 및 정답 추출
                             if "퀴즈" in title_txt:
                                 t_match = re.search(r'[-:]\s*([^\s]{1,10})$', title_txt)
                                 if t_match:
@@ -92,11 +100,12 @@ def get_real_data():
                                         if m2: ans = m2.group(1).strip()
 
                                 ans = ans.replace(")", "").replace("(", "").strip()
-                                if ans in ["정답", "퀴즈", "소진", "하세요", "이벤트", "안내"]:
+                                if ans in ["정답", "퀴즈", "소진", "이벤트", "안내"]:
                                     ans = ""
                                 if ans and ans in title_txt and not title_txt.endswith(ans):
                                     ans = "" 
 
+                            # 🚀 [4단계] 치수 입력 (22글자로 깔끔하게 포장)
                             if ans and len(ans) >= 1:
                                 info = f" [정답: {ans}]"
                             else:
@@ -136,7 +145,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: stop wiping out entire body content", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: apply CAD TTR & Trim logic", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
