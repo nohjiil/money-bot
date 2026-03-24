@@ -110,10 +110,7 @@ def get_real_data():
                                 info = f" [정답: {ans}]"
                             else:
                                 clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_c).strip()
-                                if len(clean_preview) > 0:
-                                    info = f" [미리보기: {clean_preview[:22]}...]"
-                                else:
-                                    info = " [미리보기: 본문 확인]"
+                               
                         except:
                             info = " [연결지연]"
 
