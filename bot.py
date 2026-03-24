@@ -44,7 +44,8 @@ def get_real_data():
                         full_url = href if href.startswith('http') else target['base'] + href
                         ans = ""
 
-                        t_match = re.search(r'[-:]\s*([^\s]{2,10})$', title_txt)
+                        # 🚀 [수정] 제목 끝에 1글자 정답(O, X, 1 등)도 허용!
+                        t_match = re.search(r'[-:]\s*([^\s]{1,10})$', title_txt)
                         if t_match:
                             cand = t_match.group(1).strip()
                             if cand not in ["정답", "퀴즈", "소진", "종료", "완료"]:
@@ -71,12 +72,13 @@ def get_real_data():
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
                             body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
-                            if not ans or len(ans) < 2:
+                            # 🚀 [수정] 본문에서 1글자 정답(O, X) 허용!
+                            if not ans or len(ans) < 1:
                                 m = re.search(r'(정답|답|정답은|답은)\s*[:=]\s*([^\s,.<>]{1,15})', body_cut)
                                 if m: 
                                     ans = m.group(2).strip()
                                 else:
-                                    m2 = re.search(r'([^\s,.<>]{2,15})\s*-\s*정답', body_cut)
+                                    m2 = re.search(r'([^\s,.<>]{1,15})\s*-\s*정답', body_cut)
                                     if m2: ans = m2.group(1).strip()
 
                             ans = ans.replace(")", "").replace("(", "").strip()
@@ -86,12 +88,12 @@ def get_real_data():
                             if ans and ans in title_txt and not title_txt.endswith(ans):
                                 ans = "" 
 
-                            if ans and len(ans) >= 2:
+                            # 🚀 [수정] 정답 길이가 1글자 이상이면 무조건 출력!
+                            if ans and len(ans) >= 1:
                                 info = f" [정답: {ans}]"
                             else:
                                 clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_cut).strip()
                                 
-                                # 🚀 [수정 완료] 사장님 말씀대로 쓰레기 단어가 감지되면 아예 빈칸("")으로 날려버립니다!
                                 if any(gb in clean_preview for gb in garbage_keywords) or len(clean_preview) < 3:
                                     info = "" 
                                 else:
@@ -127,7 +129,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: remove garbage output completely", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: allow 1-character answers like O, X", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
