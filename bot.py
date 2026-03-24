@@ -49,13 +49,13 @@ def get_real_data():
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             for s in p_soup(['script', 'style', 'img', 'iframe', 'title', 'head', 'header', 'nav', 'footer']): s.decompose()
 
+                            # 🚀 [치명적 버그 수정] 프로필 박스 잡던 거 빼고, 진짜 본문 영역만 정확히 선택!
                             content_elem = None
                             if "ppomppu" in full_url:
-                                content_elem = p_soup.select_one('.board-contents, td.board-contents, table.pic_bg')
+                                content_elem = p_soup.select_one('td.board-contents') or p_soup.select_one('.board-contents')
                             else:
-                                content_elem = p_soup.select_one('.post_content, .post_article')
+                                content_elem = p_soup.select_one('.post_content') or p_soup.select_one('.post_article')
 
-                            # 🚀 [1단계] 선과 원 쭉쭉 다 그리기 (본문 전체 긁어오기)
                             if content_elem:
                                 body_raw = content_elem.get_text(separator=' ')
                             else:
@@ -63,8 +63,7 @@ def get_real_data():
 
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
 
-                            # 🚀 [2단계] TTR 및 트림 (필요 없는 객체 하나씩 지우기)
-                            # 2-1. 상단 메뉴판 쓰레기 선 지우기
+                            # 🚀 사장님의 TTR 및 트림 로직 (완벽 작동)
                             garbage_strs = [
                                 "뽐뿌 휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
                                 "휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
@@ -74,16 +73,13 @@ def get_real_data():
                             for gb in garbage_strs:
                                 body_c = body_c.replace(gb, "")
                                 
-                            # 2-2. 치수선 같은 '조회수', '추천수' 딱 그 부분만 도려내기
                             body_c = re.sub(r'(등록일|작성일)\s*[:]?\s*[\d-]+\s*[\d:]+\s*', '', body_c)
                             body_c = re.sub(r'조회수?\s*[:]?\s*[\d,]+\s*', '', body_c)
                             body_c = re.sub(r'추천수?\s*[:]?\s*[\d,]+\s*', '', body_c)
 
-                            # 2-3. '하세요', 'PS' 같은 단어도 통째로 날리지 않고 딱 그 글자만 지우개로 톡톡 지우기
                             for word in ["PS", "추신", "참고", "하세요"]:
                                 body_c = body_c.replace(word, "")
 
-                            # 🚀 [3단계] 퀴즈 필터 적용 및 정답 추출
                             if "퀴즈" in title_txt:
                                 t_match = re.search(r'[-:]\s*([^\s]{1,10})$', title_txt)
                                 if t_match:
@@ -105,12 +101,14 @@ def get_real_data():
                                 if ans and ans in title_txt and not title_txt.endswith(ans):
                                     ans = "" 
 
-                            # 🚀 [4단계] 치수 입력 (22글자로 깔끔하게 포장)
                             if ans and len(ans) >= 1:
                                 info = f" [정답: {ans}]"
                             else:
                                 clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_c).strip()
-                               
+                                if len(clean_preview) > 0:
+                                    info = f" [미리보기: {clean_preview[:22]}...]"
+                                else:
+                                    info = " [미리보기: 본문 확인]"
                         except:
                             info = " [연결지연]"
 
@@ -142,7 +140,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: apply CAD TTR & Trim logic", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: correct selector to grab main drawing area, not the title block", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
