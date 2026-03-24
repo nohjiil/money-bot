@@ -54,16 +54,20 @@ def get_real_data():
                             if "ppomppu" in full_url: p_res.encoding = 'euc-kr'
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             
-                            # 🚀 [수리 완료] 메뉴판 무시하고 '진짜 본문 박스'만 족집게로 집어옵니다.
-                            if "ppomppu" in full_url:
-                                content_area = p_soup.select_one('.board-contents') or p_soup.select_one('td.board-contents') or p_soup
-                            else:
-                                content_area = p_soup.select_one('.post_content') or p_soup.select_one('.post_article') or p_soup
+                            for s in p_soup(['script', 'style', 'img', 'iframe']): s.decompose()
 
-                            for s in content_area(['script', 'style', 'img', 'iframe']): s.decompose()
-
-                            body_raw = content_area.get_text()
+                            body_raw = p_soup.get_text()
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
+                            
+                            # 🚀 [물리적 강제 절단기] 꼴보기 싫은 메뉴판 글씨를 통째로 잘라버립니다!
+                            if "뽐뿌핫딜 쇼핑" in body_c:
+                                body_c = body_c.split("뽐뿌핫딜 쇼핑")[-1]
+                            if "테마설정 톺아보기" in body_c:
+                                body_c = body_c.split("테마설정 톺아보기")[-1]
+                            
+                            # 조회수, 추천수 같은 잡다한 정보도 한 번 더 날림
+                            body_c = re.sub(r'.*?조회수\s*:\s*\d+.*?추천\s*\d+', '', body_c)
+
                             body_cut = body_c.split("PS")[0].split("추신")[0].split("참고")[0].split("하세요")[0]
 
                             if not ans or len(ans) < 2:
@@ -84,7 +88,9 @@ def get_real_data():
                             if ans and len(ans) >= 2:
                                 info = f" [정답: {ans}]"
                             else:
-                                info = f" [미리보기: {body_cut[:35]}...]"
+                                # 앞부분에 남은 특수기호 제거 후 진짜 알맹이만!
+                                clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_cut).strip()
+                                info = f" [미리보기: {clean_preview[:35]}...]"
                         except:
                             info = " [연결지연]"
 
@@ -116,7 +122,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: grab precise post content", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: brutal menu slicer", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
