@@ -16,7 +16,7 @@ def get_real_data():
     base = "https://www.ppomppu.co.kr/zboard/"
     headers = {'User-Agent': 'Mozilla/5.0'}
 
-    # 🔥 제외 대상
+    # 🔥 제외 키워드
     exclude_kws = ["모니모", "출석", "만보기", "쇼핑", "핫딜"]
 
     found = []
@@ -26,7 +26,6 @@ def get_real_data():
         res.encoding = 'euc-kr'
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # 🔥 게시글만
         for a in soup.select('a[href*="view.php"]'):
             title_txt = a.get_text().strip()
             href = a.get('href', '')
@@ -35,7 +34,11 @@ def get_real_data():
             if "퀴즈" not in title_txt:
                 continue
 
-            # 🔥 제외 키워드
+            # 🔥 이미 정답 글 제거
+            if "정답" in title_txt:
+                continue
+
+            # 🔥 불필요 제거
             if any(e in title_txt for e in exclude_kws):
                 continue
 
@@ -68,14 +71,14 @@ def get_real_data():
                 if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지"]:
                     ans = ""
 
-                if ans:
-                    info = f" [정답: {ans}]"
-                else:
-                    preview = re.sub(r'^[^가-힣a-zA-Z0-9]+', '', body)
-                    info = f" [미리보기: {preview[:25]}...]"
+                # 🔥 정답 없으면 버림 (핵심)
+                if not ans:
+                    continue
+
+                info = f" [정답: {ans}]"
 
             except:
-                info = " [에러]"
+                continue
 
             clean_t = title_txt[:25]
             found.append(f"• {clean_t}{info}")
@@ -108,7 +111,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 data = {
-    "message": "fix: quiz filter + garbage answer 제거",
+    "message": "final: quiz only + answer only clean",
     "content": encoded,
     "branch": BRANCH
 }
