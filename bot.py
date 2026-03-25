@@ -37,7 +37,7 @@ def get_real_data():
             if "정답" in title_txt:
                 continue
 
-            # 불필요 제외
+            # 불필요 제거
             if any(e in title_txt for e in exclude_kws):
                 continue
 
@@ -59,20 +59,25 @@ def get_real_data():
                 body = p_soup.get_text(" ")
                 body = re.sub(r'\s+', ' ', body)
 
-                # 정답 추출
-                m = re.search(r'(정답|답)[\s:]*([^\s,.<>]{1,10})', body)
+                # 🔥 정답 추출 강화
+                m = re.search(r'(정답|답)[\s:]*([가-힣A-Za-z0-9]{1,10})', body)
                 if m:
                     ans = m.group(2).strip()
 
+                # 🔥 괄호 제거
                 ans = ans.replace("(", "").replace(")", "").strip()
 
-                # 쓰레기 값 제거
-                if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지"]:
+                # 🔥 조사 제거
+                ans = re.sub(r'(은|는|을|를|이|가)$', '', ans)
+
+                # 🔥 쓰레기 값 제거
+                if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지", "-", ":", "답",
+                           "을", "를", "은", "는", "이", "가"]:
                     ans = ""
 
                 clean_t = title_txt[:25]
 
-                # 🔥 정답 못 찾은 경우 표시
+                # 정답 못 찾은 경우
                 if not ans:
                     found.append(f"• {clean_t} [정답 못찾음]")
                     continue
@@ -80,7 +85,6 @@ def get_real_data():
                 # 정상
                 found.append(f"• {clean_t} [정답: {ans}]")
 
-            # 🔥 크롤링 실패 표시
             except Exception as e:
                 clean_t = title_txt[:25]
                 err = str(e)[:20]
@@ -115,7 +119,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 data = {
-    "message": "debug: show fail + no answer",
+    "message": "final debug: answer filter 강화 + 쓰레기 제거",
     "content": encoded,
     "branch": BRANCH
 }
