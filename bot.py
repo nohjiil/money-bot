@@ -49,34 +49,21 @@ def get_real_data():
                             p_soup = BeautifulSoup(p_res.text, 'html.parser')
                             for s in p_soup(['script', 'style', 'img', 'iframe', 'title', 'head', 'header', 'nav', 'footer']): s.decompose()
 
-                            # 🚀 [치명적 버그 수정] 프로필 박스 잡던 거 빼고, 진짜 본문 영역만 정확히 선택!
-                            content_elem = None
-                            if "ppomppu" in full_url:
-                                content_elem = p_soup.select_one('td.board-contents') or p_soup.select_one('.board-contents')
-                            else:
-                                content_elem = p_soup.select_one('.post_content') or p_soup.select_one('.post_article')
-
-                            if content_elem:
-                                body_raw = content_elem.get_text(separator=' ')
-                            else:
-                                body_raw = p_soup.get_text(separator=' ')
-
+                            # 로봇이 길을 잃어도 괜찮게 페이지 전체 텍스트를 일단 싹 가져옵니다.
+                            body_raw = p_soup.get_text(separator=' ')
                             body_c = re.sub(r'\s+', ' ', body_raw).strip()
 
-                            # 🚀 사장님의 TTR 및 트림 로직 (완벽 작동)
-                            garbage_strs = [
-                                "뽐뿌 휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
-                                "휴대폰업체 인터넷가입업체 카드업체 렌탈업체 보험업체 정보",
-                                "공감글 커뮤니티 커뮤니티전체 C 모두의광장 F 모두의공원 I",
-                                "게시판 분류"
-                            ]
-                            for gb in garbage_strs:
-                                body_c = body_c.replace(gb, "")
+                            # 🚀 [사장님의 단칼 Trim 로직] '조회수' 글자를 기준으로 앞쪽(메뉴판)을 통째로 날려버림!
+                            parts = re.split(r'조회수?\s*[:]?\s*[\d,]+', body_c, maxsplit=1)
+                            if len(parts) > 1:
+                                body_c = parts[1] # 조회수 뒤쪽(진짜 본문)만 남김!
                                 
-                            body_c = re.sub(r'(등록일|작성일)\s*[:]?\s*[\d-]+\s*[\d:]+\s*', '', body_c)
-                            body_c = re.sub(r'조회수?\s*[:]?\s*[\d,]+\s*', '', body_c)
-                            body_c = re.sub(r'추천수?\s*[:]?\s*[\d,]+\s*', '', body_c)
+                            # 추천수 찌꺼기가 남아있으면 한 번 더 날림
+                            parts2 = re.split(r'추천수?\s*[:]?\s*[\d,]+', body_c, maxsplit=1)
+                            if len(parts2) > 1:
+                                body_c = parts2[1]
 
+                            # 정답이 잘려나가지 않게 특정 꼬리표 단어만 살짝 지우개로 지움
                             for word in ["PS", "추신", "참고", "하세요"]:
                                 body_c = body_c.replace(word, "")
 
@@ -104,6 +91,7 @@ def get_real_data():
                             if ans and len(ans) >= 1:
                                 info = f" [정답: {ans}]"
                             else:
+                                # 미리보기 앞부분에 남은 특수기호 찌꺼기 청소
                                 clean_preview = re.sub(r'^[^a-zA-Z0-9가-힣]+', '', body_c).strip()
                                 if len(clean_preview) > 0:
                                     info = f" [미리보기: {clean_preview[:22]}...]"
@@ -140,7 +128,7 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
-data = {"message": "fix: correct selector to grab main drawing area, not the title block", "content": encoded, "branch": BRANCH}
+data = {"message": "fix: bulletproof trim to remove nav bar completely", "content": encoded, "branch": BRANCH}
 if sha: data["sha"] = sha
 
 res = requests.put(url, headers=h, json=data)
