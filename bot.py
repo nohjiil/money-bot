@@ -16,7 +16,6 @@ def get_real_data():
     base = "https://www.ppomppu.co.kr/zboard/"
     headers = {'User-Agent': 'Mozilla/5.0'}
 
-    # 🔥 제외 키워드
     exclude_kws = ["모니모", "출석", "만보기", "쇼핑", "핫딜"]
 
     found = []
@@ -30,15 +29,15 @@ def get_real_data():
             title_txt = a.get_text().strip()
             href = a.get('href', '')
 
-            # 🔥 퀴즈만
+            # 퀴즈만
             if "퀴즈" not in title_txt:
                 continue
 
-            # 🔥 이미 정답 글 제거
+            # 정답글 제외
             if "정답" in title_txt:
                 continue
 
-            # 🔥 불필요 제거
+            # 불필요 제외
             if any(e in title_txt for e in exclude_kws):
                 continue
 
@@ -60,34 +59,39 @@ def get_real_data():
                 body = p_soup.get_text(" ")
                 body = re.sub(r'\s+', ' ', body)
 
-                # 🔥 정답 추출
+                # 정답 추출
                 m = re.search(r'(정답|답)[\s:]*([^\s,.<>]{1,10})', body)
                 if m:
                     ans = m.group(2).strip()
 
                 ans = ans.replace("(", "").replace(")", "").strip()
 
-                # 🔥 쓰레기 값 제거
+                # 쓰레기 값 제거
                 if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지"]:
                     ans = ""
 
-                # 🔥 정답 없으면 버림 (핵심)
+                clean_t = title_txt[:25]
+
+                # 🔥 정답 못 찾은 경우 표시
                 if not ans:
+                    found.append(f"• {clean_t} [정답 못찾음]")
                     continue
 
-                info = f" [정답: {ans}]"
+                # 정상
+                found.append(f"• {clean_t} [정답: {ans}]")
 
-            except:
+            # 🔥 크롤링 실패 표시
+            except Exception as e:
+                clean_t = title_txt[:25]
+                err = str(e)[:20]
+                found.append(f"• {clean_t} [크롤링 실패: {err}]")
                 continue
-
-            clean_t = title_txt[:25]
-            found.append(f"• {clean_t}{info}")
 
             if len(found) >= 20:
                 break
 
-    except:
-        return ["❌ 크롤링 실패"]
+    except Exception as e:
+        return [f"❌ 전체 크롤링 실패: {str(e)[:30]}"]
 
     return found
 
@@ -97,7 +101,7 @@ items = get_real_data()
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
-header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 퀴즈 정보\n------------------------\n\n"
+header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 퀴즈 정보 (디버깅 모드)\n------------------------\n\n"
 body = "<br>".join(items) if items else "⏳ 없음"
 final_text = header + body
 
@@ -111,10 +115,11 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 data = {
-    "message": "final: quiz only + answer only clean",
+    "message": "debug: show fail + no answer",
     "content": encoded,
     "branch": BRANCH
 }
+
 if sha:
     data["sha"] = sha
 
