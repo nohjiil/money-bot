@@ -16,6 +16,9 @@ def get_real_data():
     base = "https://www.ppomppu.co.kr/zboard/"
     headers = {'User-Agent': 'Mozilla/5.0'}
 
+    # 🔥 제외 대상
+    exclude_kws = ["모니모", "출석", "만보기", "쇼핑", "핫딜"]
+
     found = []
 
     try:
@@ -23,16 +26,19 @@ def get_real_data():
         res.encoding = 'euc-kr'
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # 🔥 게시글만 가져오기
+        # 🔥 게시글만
         for a in soup.select('a[href*="view.php"]'):
             title_txt = a.get_text().strip()
             href = a.get('href', '')
 
-            # 🔥 퀴즈만 통과
+            # 🔥 퀴즈만
             if "퀴즈" not in title_txt:
                 continue
 
-            # 🔥 이상한 짧은 텍스트 제거
+            # 🔥 제외 키워드
+            if any(e in title_txt for e in exclude_kws):
+                continue
+
             if len(title_txt) < 6:
                 continue
 
@@ -51,18 +57,22 @@ def get_real_data():
                 body = p_soup.get_text(" ")
                 body = re.sub(r'\s+', ' ', body)
 
-                # 🔥 정답 찾기
+                # 🔥 정답 추출
                 m = re.search(r'(정답|답)[\s:]*([^\s,.<>]{1,10})', body)
                 if m:
                     ans = m.group(2).strip()
 
                 ans = ans.replace("(", "").replace(")", "").strip()
 
+                # 🔥 쓰레기 값 제거
+                if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지"]:
+                    ans = ""
+
                 if ans:
                     info = f" [정답: {ans}]"
                 else:
-                    preview = body[:30]
-                    info = f" [미리보기: {preview}...]"
+                    preview = re.sub(r'^[^가-힣a-zA-Z0-9]+', '', body)
+                    info = f" [미리보기: {preview[:25]}...]"
 
             except:
                 info = " [에러]"
@@ -98,7 +108,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 data = {
-    "message": "fix: quiz only clean version",
+    "message": "fix: quiz filter + garbage answer 제거",
     "content": encoded,
     "branch": BRANCH
 }
