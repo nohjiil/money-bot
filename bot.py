@@ -12,13 +12,18 @@ BRANCH = "main"
 TOKEN = os.environ.get("GITHUB_TOKEN")
 
 
+def clean_title(title):
+    title = re.sub(r'\s+', ' ', title)
+    title = title.strip()
+    return title[:30]
+
+
 def extract_answer(body, title):
     patterns = [
         r'정답[\s:]*([가-힣A-Za-z0-9]{1,15})',
         r'답[\s:]*([가-힣A-Za-z0-9]{1,15})',
         r'정답은[\s:]*([가-힣A-Za-z0-9]{1,15})',
-        r'답은[\s:]*([가-힣A-Za-z0-9]{1,15})',
-        r'힌트[\s:]*([가-힣A-Za-z0-9]{1,15})'
+        r'답은[\s:]*([가-힣A-Za-z0-9]{1,15})'
     ]
 
     for p in patterns:
@@ -26,20 +31,8 @@ def extract_answer(body, title):
         if m:
             ans = m.group(1).strip()
             ans = re.sub(r'(은|는|을|를|이|가)$', '', ans)
-
             if ans not in ["정보", "내용", "확인", "-", "답"]:
                 return ans
-
-    # 문장형 보정
-    sentence_patterns = [
-        r'정답은\s*([가-힣]{2,10})',
-        r'정답은\s*[가-힣\s]+?([가-힣]{2,10})입니다'
-    ]
-
-    for sp in sentence_patterns:
-        m = re.search(sp, body)
-        if m:
-            return m.group(1)
 
     # 숫자형
     m2 = re.search(r'(\d+)번', body)
@@ -49,10 +42,6 @@ def extract_answer(body, title):
     # OX
     if "OX" in title:
         return "O/X형"
-
-    # 글자수 힌트
-    if re.search(r'\(\d+글자\)', title):
-        return "주관식"
 
     return ""
 
@@ -76,29 +65,25 @@ def get_real_data():
             title_txt = a.get_text().strip()
             href = a.get('href', '')
 
-            # 퀴즈만
             if "퀴즈" not in title_txt:
                 continue
 
-            # 정답글 제외
             if "정답" in title_txt:
                 continue
 
-            # 이모지/AI 문제 제거
             if any(x in title_txt.lower() for x in ["이모", "이모지", "emoji"]):
                 continue
 
-            # 불필요 필터
             if any(e in title_txt for e in exclude_kws):
                 continue
 
-            # 중복 제거
             key = title_txt[:20]
             if key in seen:
                 continue
             seen.add(key)
 
             full_url = href if href.startswith('http') else base + href
+            clean_t = clean_title(title_txt)
 
             try:
                 time.sleep(0.8)
@@ -106,32 +91,22 @@ def get_real_data():
                 p_res.encoding = 'euc-kr'
                 p_soup = BeautifulSoup(p_res.text, 'html.parser')
 
-                # 불필요 제거
                 for s in p_soup(['script', 'style', 'img']):
                     s.decompose()
 
-                # 본문 + 댓글
-                text_blocks = []
-                text_blocks.append(p_soup.get_text(" "))
-
-                comments = p_soup.select('.board-comment, .comment_list, .commentContent')
-                for c in comments:
-                    text_blocks.append(c.get_text(" "))
-
-                body = " ".join(text_blocks)
+                body = p_soup.get_text(" ")
                 body = re.sub(r'\s+', ' ', body)
 
                 ans = extract_answer(body, title_txt)
-                clean_t = title_txt[:25]
 
-                # 🔥 핵심 UX
                 if not ans:
-                    found.append(f"• {clean_t} 👉 <a href='{full_url}'>정답확인하기</a>")
+                    found.append(f"• {clean_t} 👉 <a href='{full_url}' target='_blank'>정답확인하기</a>")
                 else:
                     found.append(f"• {clean_t} [정답: {ans}]")
 
             except:
-                found.append(f"• {title_txt[:25]} [실패]")
+                # 🔥 실패도 클릭 가능하게 변경
+                found.append(f"• {clean_t} 👉 <a href='{full_url}' target='_blank'>확인하기</a>")
 
             if len(found) >= 20:
                 break
@@ -164,7 +139,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
 data = {
-    "message": "final complete version (UX + 안정성 + 링크)",
+    "message": "final stable UX version",
     "content": encoded,
     "branch": BRANCH
 }
