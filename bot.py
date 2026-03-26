@@ -11,6 +11,34 @@ FILE_PATH = "data.txt"
 BRANCH = "main"
 TOKEN = os.environ.get("GITHUB_TOKEN")
 
+def extract_answer(body):
+    patterns = [
+        r'정답[\s:]*([가-힣A-Za-z0-9]{1,15})',
+        r'답[\s:]*([가-힣A-Za-z0-9]{1,15})',
+        r'정답은[\s:]*([가-힣A-Za-z0-9]{1,15})',
+        r'답은[\s:]*([가-힣A-Za-z0-9]{1,15})',
+        r'▶\s*([가-힣A-Za-z0-9]{1,15})',
+        r'☞\s*([가-힣A-Za-z0-9]{1,15})'
+    ]
+
+    for p in patterns:
+        m = re.search(p, body)
+        if m:
+            ans = m.group(1).strip()
+
+            # 조사 제거
+            ans = re.sub(r'(은|는|을|를|이|가)$', '', ans)
+
+            # 쓰레기 제거
+            if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지", "-", ":", "답"]:
+                continue
+
+            if len(ans) >= 1:
+                return ans
+
+    return ""
+
+
 def get_real_data():
     url = "https://www.ppomppu.co.kr/zboard/zboard.php?id=coupon"
     base = "https://www.ppomppu.co.kr/zboard/"
@@ -29,15 +57,12 @@ def get_real_data():
             title_txt = a.get_text().strip()
             href = a.get('href', '')
 
-            # 퀴즈만
             if "퀴즈" not in title_txt:
                 continue
 
-            # 정답글 제외
             if "정답" in title_txt:
                 continue
 
-            # 불필요 제거
             if any(e in title_txt for e in exclude_kws):
                 continue
 
@@ -45,7 +70,6 @@ def get_real_data():
                 continue
 
             full_url = href if href.startswith('http') else base + href
-            ans = ""
 
             try:
                 time.sleep(0.8)
@@ -59,30 +83,14 @@ def get_real_data():
                 body = p_soup.get_text(" ")
                 body = re.sub(r'\s+', ' ', body)
 
-                # 🔥 정답 추출 강화
-                m = re.search(r'(정답|답)[\s:]*([가-힣A-Za-z0-9]{1,10})', body)
-                if m:
-                    ans = m.group(2).strip()
-
-                # 🔥 괄호 제거
-                ans = ans.replace("(", "").replace(")", "").strip()
-
-                # 🔥 조사 제거
-                ans = re.sub(r'(은|는|을|를|이|가)$', '', ans)
-
-                # 🔥 쓰레기 값 제거
-                if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지", "-", ":", "답",
-                           "을", "를", "은", "는", "이", "가"]:
-                    ans = ""
+                ans = extract_answer(body)
 
                 clean_t = title_txt[:25]
 
-                # 정답 못 찾은 경우
                 if not ans:
                     found.append(f"• {clean_t} [정답 못찾음]")
                     continue
 
-                # 정상
                 found.append(f"• {clean_t} [정답: {ans}]")
 
             except Exception as e:
@@ -118,8 +126,9 @@ res = requests.get(url, headers=h)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
+
 data = {
-    "message": "final debug: answer filter 강화 + 쓰레기 제거",
+    "message": "upgrade: multi-pattern answer extraction",
     "content": encoded,
     "branch": BRANCH
 }
