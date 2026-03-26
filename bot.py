@@ -20,7 +20,6 @@ def extract_answer(body, title):
         r'답은[\s:]*([가-힣A-Za-z0-9]{1,15})'
     ]
 
-    # 1️⃣ 본문 우선
     for p in patterns:
         m = re.search(p, body)
         if m:
@@ -30,16 +29,16 @@ def extract_answer(body, title):
             if ans not in ["정보", "내용", "확인", "-", "답"]:
                 return ans
 
-    # 2️⃣ 제목에서 숫자형 추출 (예: 1번)
+    # 숫자형 (1번 등)
     m2 = re.search(r'(\d+)번', body)
     if m2:
         return m2.group(1) + "번"
 
-    # 3️⃣ OX 퀴즈
+    # OX
     if "OX" in title:
         return "O/X형"
 
-    # 4️⃣ 글자수 힌트
+    # 글자수 힌트
     if re.search(r'\(\d+글자\)', title):
         return "주관식"
 
@@ -54,7 +53,7 @@ def get_real_data():
     exclude_kws = ["모니모", "출석", "만보기", "쇼핑", "핫딜"]
 
     found = []
-    seen = set()  # 🔥 중복 제거
+    seen = set()
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
@@ -74,7 +73,6 @@ def get_real_data():
             if any(e in title_txt for e in exclude_kws):
                 continue
 
-            # 🔥 중복 체크
             key = title_txt[:20]
             if key in seen:
                 continue
@@ -88,10 +86,22 @@ def get_real_data():
                 p_res.encoding = 'euc-kr'
                 p_soup = BeautifulSoup(p_res.text, 'html.parser')
 
+                # 불필요 제거
                 for s in p_soup(['script', 'style', 'img']):
                     s.decompose()
 
-                body = p_soup.get_text(" ")
+                # 🔥 본문 + 댓글까지 포함
+                text_blocks = []
+
+                # 본문
+                text_blocks.append(p_soup.get_text(" "))
+
+                # 댓글 영역 (뽐뿌)
+                comments = p_soup.select('.board-comment, .comment_list, .commentContent')
+                for c in comments:
+                    text_blocks.append(c.get_text(" "))
+
+                body = " ".join(text_blocks)
                 body = re.sub(r'\s+', ' ', body)
 
                 ans = extract_answer(body, title_txt)
@@ -123,7 +133,7 @@ items = get_real_data()
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
-header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 퀴즈 정보 (완성 모드)\n------------------------\n\n"
+header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 퀴즈 정보 (최종 모드)\n------------------------\n\n"
 body = "<br>".join(items) if items else "⏳ 없음"
 final_text = header + body
 
@@ -138,7 +148,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
 data = {
-    "message": "final: 중복 제거 + 추정 로직 완료",
+    "message": "final: 댓글까지 포함한 정답 추출",
     "content": encoded,
     "branch": BRANCH
 }
