@@ -30,10 +30,10 @@ def extract_answer(body, title):
             if ans not in ["정보", "내용", "확인", "-", "답"]:
                 return ans
 
-    # 🔥 문장형 정답 추출
+    # 문장형
     sentence_patterns = [
         r'정답은\s*([가-힣]{2,10})',
-        r'정답은\s*[가-힣\s]+?([가-힣]{2,10})입니다',
+        r'정답은\s*[가-힣\s]+?([가-힣]{2,10})입니다'
     ]
 
     for sp in sentence_patterns:
@@ -119,7 +119,7 @@ def get_real_data():
                 clean_t = title_txt[:25]
 
                 if not ans:
-                    found.append(f"• {clean_t} [추정 필요]")
+                    found.append(f"• {clean_t} [앱 확인]")
                     continue
 
                 found.append(f"• {clean_t} [정답: {ans}]")
@@ -143,7 +143,7 @@ items = get_real_data()
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
-header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 퀴즈 정보 (완성 모드)\n------------------------\n\n"
+header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n🎁 포인트 올인원 매니저\n------------------------\n\n"
 body = "<br>".join(items) if items else "⏳ 없음"
 final_text = header + body
 
@@ -158,7 +158,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
 data = {
-    "message": "final upgrade: sentence answer extraction",
+    "message": "final: 앱 확인 표시 적용",
     "content": encoded,
     "branch": BRANCH
 }
