@@ -12,58 +12,50 @@ BRANCH = "main"
 TOKEN = os.environ.get("GITHUB_TOKEN")
 
 
+# ✅ 정답 추출 (강화 버전)
 def extract_answer(body, title):
 
-    # 1차: 정형 패턴
+    body = body.replace("\n", " ")
+
     patterns = [
-        r'정답[\s:]*["“]?([가-힣A-Za-z0-9]{1,15})',
-        r'정답은\s*["“]?([가-힣A-Za-z0-9]{1,15})',
-        r'답은\s*["“]?([가-힣A-Za-z0-9]{1,15})',
-        r'\[정답\]\s*([가-힣A-Za-z0-9]{1,15})',
-        r'([가-힣A-Za-z0-9]{1,15})\s*-\s*정답'
+        r'정답\s*[:\-]?\s*([가-힣A-Za-z0-9]{1,20})',
+        r'정답은\s*([가-힣A-Za-z0-9]{1,20})',
+        r'답은\s*([가-힣A-Za-z0-9]{1,20})',
+        r'👉\s*([가-힣A-Za-z0-9]{1,20})',
+        r'☞\s*([가-힣A-Za-z0-9]{1,20})',
     ]
 
     for p in patterns:
         m = re.search(p, body)
         if m:
-            ans = m.group(1).strip()
-            ans = re.sub(r'(입니다|요|입니다\.)$', '', ans)
+            ans = m.group(1)
+            ans = re.sub(r'(입니다|입니다\.|요|입니다요)$', '', ans)
+            ans = ans.strip()
 
-            if ans not in ["정답", "확인", "내용"]:
+            # 의미없는 값 필터
+            if ans not in ["확인", "내용", "링크", "바로가기"]:
                 return ans
 
-    # 🔥 2차: 후보 추출 (강화)
-    candidates = re.findall(r'\b[가-힣]{2,6}\b', body)
+    # 숫자형 (1번, 2번)
+    m = re.search(r'(\d+)번', body)
+    if m:
+        return m.group(1) + "번"
 
-    blacklist = [
-        "뿜뿌", "게시판", "로그인", "추천", "조회", "댓글",
-        "이벤트", "오늘", "정보", "공유", "내용", "확인",
-        "쿠폰", "공지", "작성", "등록", "사용", "가능",
-        "클릭", "이동", "바로", "가기", "보기", "링크"
-    ]
-
-    for c in candidates[:100]:
-        if c not in blacklist:
-            return c
-
-    # 3차: 숫자형
-    m2 = re.search(r'(\d+)번', body)
-    if m2:
-        return m2.group(1) + "번"
-
-    # 4차: OX
+    # OX 퀴즈
     if "OX" in title:
         return "O/X형"
 
     return ""
 
 
+# ✅ 크롤링
 def get_real_data():
+
     url = "https://www.ppomppu.co.kr/zboard/zboard.php?id=coupon"
     base = "https://www.ppomppu.co.kr/zboard/"
     headers = {'User-Agent': 'Mozilla/5.0'}
 
-    exclude_kws = ["모니모", "출석", "만보기", "쇼핑", "핫딜"]
+    exclude_kws = ["출석", "만보기", "핫딜", "쇼핑"]
 
     found = []
     seen = set()
@@ -74,21 +66,19 @@ def get_real_data():
         soup = BeautifulSoup(res.text, 'html.parser')
 
         for a in soup.select('a[href*="view.php"]'):
+
             title_txt = a.get_text().strip()
             href = a.get('href', '')
 
+            # 퀴즈만
             if "퀴즈" not in title_txt:
                 continue
 
+            # 정답글 제외
             if "정답" in title_txt:
                 continue
 
-            if any(x in title_txt.lower() for x in ["이모", "이모지", "emoji"]):
-                continue
-
-            if any(e in title_txt for e in exclude_kws):
-                continue
-
+            # 중복 제거
             key = title_txt[:20]
             if key in seen:
                 continue
@@ -97,66 +87,68 @@ def get_real_data():
             full_url = href if href.startswith('http') else base + href
 
             try:
-                time.sleep(0.8)
+                time.sleep(0.7)
+
                 p_res = requests.get(full_url, headers=headers, timeout=10)
                 p_res.encoding = 'euc-kr'
                 p_soup = BeautifulSoup(p_res.text, 'html.parser')
 
-                for s in p_soup(['script', 'style', 'img']):
+                # 스크립트 제거
+                for s in p_soup(['script', 'style']):
                     s.decompose()
 
-                text_blocks = []
-                text_blocks.append(p_soup.get_text(" "))
-
-                comments = p_soup.select('.board-comment, .comment_list, .commentContent')
-                for c in comments:
-                    text_blocks.append(c.get_text(" "))
-
-                body = " ".join(text_blocks)
+                # 본문 + 댓글
+                body = p_soup.get_text(" ")
                 body = re.sub(r'\s+', ' ', body)
 
                 ans = extract_answer(body, title_txt)
+
                 clean_t = title_txt[:25]
 
+                # ✅ UX 핵심
                 if not ans:
-                    found.append(f"• {clean_t} 👉 <a href='{full_url}' style='color:blue;font-weight:bold;'>정답확인하기</a>")
+                    found.append(f"• {clean_t} 👉 <a href='{full_url}'>정답확인하기</a>")
                 else:
                     found.append(f"• {clean_t} [정답: {ans}]")
 
             except:
-                found.append(f"• {title_txt[:25]} 👉 <a href='{full_url}'>확인필요</a>")
+                found.append(f"• {title_txt[:25]} 👉 <a href='{full_url}'>확인하기</a>")
 
             if len(found) >= 20:
                 break
 
     except:
-        return ["❌ 전체 실패"]
+        return ["❌ 전체 크롤링 실패"]
 
     return found
 
 
-# 실행
+# ✅ 실행
 items = get_real_data()
 
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
 header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n🎁 포인트 올인원 매니저\n------------------------\n\n"
+
 body = "<br>".join(items) if items else "⏳ 없음"
+
 final_text = header + body
 
 print("🔥 BOT 실행됨")
 
-url = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
-h = {"Authorization": f"token {TOKEN}"}
 
-res = requests.get(url, headers=h)
+# ✅ GitHub 업로드
+url = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
+headers = {"Authorization": f"token {TOKEN}"}
+
+res = requests.get(url, headers=headers)
 sha = res.json().get("sha") if res.status_code == 200 else None
 
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
 data = {
-    "message": "final fix (뿜뿌 제거 + 정확도 향상)",
+    "message": "final bot (정답추출 + 링크 UX)",
     "content": encoded,
     "branch": BRANCH
 }
@@ -164,5 +156,6 @@ data = {
 if sha:
     data["sha"] = sha
 
-requests.put(url, headers=h, json=data)
+requests.put(url, headers=headers, json=data)
+
 print("🚀 업로드 완료")
