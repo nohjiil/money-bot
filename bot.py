@@ -30,7 +30,7 @@ def extract_answer(body, title):
             if ans not in ["정보", "내용", "확인", "-", "답"]:
                 return ans
 
-    # 문장형
+    # 문장형 보정
     sentence_patterns = [
         r'정답은\s*([가-힣]{2,10})',
         r'정답은\s*[가-힣\s]+?([가-힣]{2,10})입니다'
@@ -76,18 +76,23 @@ def get_real_data():
             title_txt = a.get_text().strip()
             href = a.get('href', '')
 
+            # 퀴즈만
             if "퀴즈" not in title_txt:
                 continue
 
+            # 정답글 제외
             if "정답" in title_txt:
                 continue
 
+            # 이모지/AI 문제 제거
             if any(x in title_txt.lower() for x in ["이모", "이모지", "emoji"]):
                 continue
 
+            # 불필요 필터
             if any(e in title_txt for e in exclude_kws):
                 continue
 
+            # 중복 제거
             key = title_txt[:20]
             if key in seen:
                 continue
@@ -101,9 +106,11 @@ def get_real_data():
                 p_res.encoding = 'euc-kr'
                 p_soup = BeautifulSoup(p_res.text, 'html.parser')
 
+                # 불필요 제거
                 for s in p_soup(['script', 'style', 'img']):
                     s.decompose()
 
+                # 본문 + 댓글
                 text_blocks = []
                 text_blocks.append(p_soup.get_text(" "))
 
@@ -115,19 +122,16 @@ def get_real_data():
                 body = re.sub(r'\s+', ' ', body)
 
                 ans = extract_answer(body, title_txt)
-
                 clean_t = title_txt[:25]
 
+                # 🔥 핵심 UX
                 if not ans:
-                    found.append(f"• {clean_t} [앱 확인]")
-                    continue
-
-                found.append(f"• {clean_t} [정답: {ans}]")
+                    found.append(f"• {clean_t} 👉 <a href='{full_url}'>정답확인하기</a>")
+                else:
+                    found.append(f"• {clean_t} [정답: {ans}]")
 
             except:
-                clean_t = title_txt[:25]
-                found.append(f"• {clean_t} [실패]")
-                continue
+                found.append(f"• {title_txt[:25]} [실패]")
 
             if len(found) >= 20:
                 break
@@ -138,6 +142,7 @@ def get_real_data():
     return found
 
 
+# 실행
 items = get_real_data()
 
 now_kst = datetime.utcnow() + timedelta(hours=9)
@@ -149,6 +154,7 @@ final_text = header + body
 
 print("🔥 BOT 실행됨")
 
+# GitHub 업로드
 url = f"https://api.github.com/repos/{REPO}/contents/{FILE_PATH}"
 h = {"Authorization": f"token {TOKEN}"}
 
@@ -158,7 +164,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
 data = {
-    "message": "final: 앱 확인 표시 적용",
+    "message": "final complete version (UX + 안정성 + 링크)",
     "content": encoded,
     "branch": BRANCH
 }
