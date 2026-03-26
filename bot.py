@@ -25,15 +25,23 @@ def extract_answer(body, title):
         m = re.search(p, body)
         if m:
             ans = m.group(1).strip()
-
-            # 조사 제거
             ans = re.sub(r'(은|는|을|를|이|가)$', '', ans)
 
-            # 쓰레기 제거
             if ans not in ["정보", "내용", "확인", "-", "답"]:
                 return ans
 
-    # 숫자형 (1번)
+    # 🔥 문장형 정답 추출
+    sentence_patterns = [
+        r'정답은\s*([가-힣]{2,10})',
+        r'정답은\s*[가-힣\s]+?([가-힣]{2,10})입니다',
+    ]
+
+    for sp in sentence_patterns:
+        m = re.search(sp, body)
+        if m:
+            return m.group(1)
+
+    # 숫자형
     m2 = re.search(r'(\d+)번', body)
     if m2:
         return m2.group(1) + "번"
@@ -42,7 +50,7 @@ def extract_answer(body, title):
     if "OX" in title:
         return "O/X형"
 
-    # 주관식 힌트
+    # 글자수 힌트
     if re.search(r'\(\d+글자\)', title):
         return "주관식"
 
@@ -68,23 +76,18 @@ def get_real_data():
             title_txt = a.get_text().strip()
             href = a.get('href', '')
 
-            # 퀴즈만
             if "퀴즈" not in title_txt:
                 continue
 
-            # 정답글 제외
             if "정답" in title_txt:
                 continue
 
-            # 이모지/AI 문제 제거
             if any(x in title_txt.lower() for x in ["이모", "이모지", "emoji"]):
                 continue
 
-            # 불필요 제거
             if any(e in title_txt for e in exclude_kws):
                 continue
 
-            # 중복 제거
             key = title_txt[:20]
             if key in seen:
                 continue
@@ -98,11 +101,9 @@ def get_real_data():
                 p_res.encoding = 'euc-kr'
                 p_soup = BeautifulSoup(p_res.text, 'html.parser')
 
-                # 불필요 태그 제거
                 for s in p_soup(['script', 'style', 'img']):
                     s.decompose()
 
-                # 본문 + 댓글 포함
                 text_blocks = []
                 text_blocks.append(p_soup.get_text(" "))
 
@@ -157,7 +158,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
 data = {
-    "message": "final complete version",
+    "message": "final upgrade: sentence answer extraction",
     "content": encoded,
     "branch": BRANCH
 }
