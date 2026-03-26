@@ -11,30 +11,37 @@ FILE_PATH = "data.txt"
 BRANCH = "main"
 TOKEN = os.environ.get("GITHUB_TOKEN")
 
-def extract_answer(body):
+
+def extract_answer(body, title):
     patterns = [
         r'정답[\s:]*([가-힣A-Za-z0-9]{1,15})',
         r'답[\s:]*([가-힣A-Za-z0-9]{1,15})',
         r'정답은[\s:]*([가-힣A-Za-z0-9]{1,15})',
-        r'답은[\s:]*([가-힣A-Za-z0-9]{1,15})',
-        r'▶\s*([가-힣A-Za-z0-9]{1,15})',
-        r'☞\s*([가-힣A-Za-z0-9]{1,15})'
+        r'답은[\s:]*([가-힣A-Za-z0-9]{1,15})'
     ]
 
+    # 1️⃣ 본문 우선
     for p in patterns:
         m = re.search(p, body)
         if m:
             ans = m.group(1).strip()
-
-            # 조사 제거
             ans = re.sub(r'(은|는|을|를|이|가)$', '', ans)
 
-            # 쓰레기 제거
-            if ans in ["정보", "내용", "확인", "참고", "이벤트", "공지", "-", ":", "답"]:
-                continue
-
-            if len(ans) >= 1:
+            if ans not in ["정보", "내용", "확인", "-", "답"]:
                 return ans
+
+    # 2️⃣ 제목에서 숫자형 추출 (예: 1번)
+    m2 = re.search(r'(\d+)번', body)
+    if m2:
+        return m2.group(1) + "번"
+
+    # 3️⃣ OX 퀴즈
+    if "OX" in title:
+        return "O/X형"
+
+    # 4️⃣ 글자수 힌트
+    if re.search(r'\(\d+글자\)', title):
+        return "주관식"
 
     return ""
 
@@ -47,6 +54,7 @@ def get_real_data():
     exclude_kws = ["모니모", "출석", "만보기", "쇼핑", "핫딜"]
 
     found = []
+    seen = set()  # 🔥 중복 제거
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
@@ -66,8 +74,11 @@ def get_real_data():
             if any(e in title_txt for e in exclude_kws):
                 continue
 
-            if len(title_txt) < 6:
+            # 🔥 중복 체크
+            key = title_txt[:20]
+            if key in seen:
                 continue
+            seen.add(key)
 
             full_url = href if href.startswith('http') else base + href
 
@@ -83,27 +94,26 @@ def get_real_data():
                 body = p_soup.get_text(" ")
                 body = re.sub(r'\s+', ' ', body)
 
-                ans = extract_answer(body)
+                ans = extract_answer(body, title_txt)
 
                 clean_t = title_txt[:25]
 
                 if not ans:
-                    found.append(f"• {clean_t} [정답 못찾음]")
+                    found.append(f"• {clean_t} [확인 필요]")
                     continue
 
                 found.append(f"• {clean_t} [정답: {ans}]")
 
-            except Exception as e:
+            except:
                 clean_t = title_txt[:25]
-                err = str(e)[:20]
-                found.append(f"• {clean_t} [크롤링 실패: {err}]")
+                found.append(f"• {clean_t} [실패]")
                 continue
 
             if len(found) >= 20:
                 break
 
-    except Exception as e:
-        return [f"❌ 전체 크롤링 실패: {str(e)[:30]}"]
+    except:
+        return ["❌ 전체 실패"]
 
     return found
 
@@ -113,7 +123,7 @@ items = get_real_data()
 now_kst = datetime.utcnow() + timedelta(hours=9)
 now_str = now_kst.strftime("%Y-%m-%d %H:%M")
 
-header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 퀴즈 정보 (디버깅 모드)\n------------------------\n\n"
+header = f"🗓️ 업데이트 시간: {now_str} (한국시간)\n\n✅ 퀴즈 정보 (완성 모드)\n------------------------\n\n"
 body = "<br>".join(items) if items else "⏳ 없음"
 final_text = header + body
 
@@ -128,7 +138,7 @@ sha = res.json().get("sha") if res.status_code == 200 else None
 encoded = base64.b64encode(final_text.encode('utf-8')).decode('utf-8')
 
 data = {
-    "message": "upgrade: multi-pattern answer extraction",
+    "message": "final: 중복 제거 + 추정 로직 완료",
     "content": encoded,
     "branch": BRANCH
 }
@@ -136,5 +146,5 @@ data = {
 if sha:
     data["sha"] = sha
 
-res = requests.put(url, headers=h, json=data)
-print("🚀 업로드:", res.status_code)
+requests.put(url, headers=h, json=data)
+print("🚀 업로드 완료")
